@@ -68,11 +68,23 @@ class CallLogMatcher(private val context: Context) {
 
     /**
      * Loads a single page of the device call log, newest first, for paginated UI lists.
-     * Uses [ContentResolver] query-argument bundles ([android.content.ContentResolver.QUERY_ARG_OFFSET] /
-     * [android.content.ContentResolver.QUERY_ARG_LIMIT]) so the content provider only returns
-     * the rows we need rather than the entire call history every time.
+     *
+     * Tries [ContentResolver] query-argument bundles ([android.content.ContentResolver.QUERY_ARG_OFFSET] /
+     * [android.content.ContentResolver.QUERY_ARG_LIMIT]) first so the content provider only
+     * returns the rows we need. Some OEM call-log providers silently ignore these Bundle args
+     * and return the *entire* call log regardless — when that happens (result has more rows
+     * than requested), we fall back to slicing the full list ourselves so pagination still
+     * behaves correctly everywhere.
      */
     suspend fun loadCallLogPage(offset: Int, limit: Int): List<CallLogEntry> = withContext(Dispatchers.IO) {
+        val queried = queryCallLog(offset, limit)
+        if (queried.size <= limit) return@withContext queried
+
+        // Provider ignored offset/limit and returned everything — slice it client-side.
+        queried.drop(offset).take(limit)
+    }
+
+    private fun queryCallLog(offset: Int, limit: Int): List<CallLogEntry> {
         val entries = mutableListOf<CallLogEntry>()
         val projection = arrayOf(
             CallLog.Calls.NUMBER,
@@ -122,7 +134,7 @@ class CallLogMatcher(private val context: Context) {
             }
         }
 
-        entries
+        return entries
     }
 
     /**

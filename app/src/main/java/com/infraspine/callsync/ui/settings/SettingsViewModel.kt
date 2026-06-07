@@ -5,15 +5,10 @@ import androidx.lifecycle.LiveData
 import androidx.lifecycle.MutableLiveData
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
-import androidx.lifecycle.viewModelScope
 import com.infraspine.callsync.AppContainer
 import com.infraspine.callsync.data.prefs.SecureSettingsStore
 import com.infraspine.callsync.domain.util.DeviceIdProvider
 import com.infraspine.callsync.sync.SyncScheduler
-import com.infraspine.callsync.ui.common.Event
-import com.infraspine.callsync.update.UpdateCheckResult
-import com.infraspine.callsync.update.UpdateChecker
-import kotlinx.coroutines.launch
 
 data class SettingsUiState(
     val crmServerUrl: String,
@@ -26,8 +21,7 @@ data class SettingsUiState(
 
 class SettingsViewModel(
     private val context: Context,
-    private val settingsStore: SecureSettingsStore,
-    private val updateChecker: UpdateChecker
+    private val settingsStore: SecureSettingsStore
 ) : ViewModel() {
 
     private val _uiState = MutableLiveData(loadCurrentState())
@@ -35,28 +29,6 @@ class SettingsViewModel(
 
     private val _saved = MutableLiveData<Boolean>()
     val saved: LiveData<Boolean> = _saved
-
-    private val _isCheckingForUpdate = MutableLiveData(false)
-    val isCheckingForUpdate: LiveData<Boolean> = _isCheckingForUpdate
-
-    private val _updateResult = MutableLiveData<Event<UpdateCheckResult>>()
-    val updateResult: LiveData<Event<UpdateCheckResult>> = _updateResult
-
-    fun checkForUpdates() {
-        if (_isCheckingForUpdate.value == true) return
-
-        viewModelScope.launch {
-            _isCheckingForUpdate.value = true
-            val result = updateChecker.checkForUpdate()
-            _isCheckingForUpdate.value = false
-            _updateResult.value = Event(result)
-        }
-    }
-
-    /** Called once the agent taps through to download — stops re-prompting for this build. */
-    fun acknowledgeUpdate(publishedAt: String) {
-        updateChecker.acknowledgeVersion(publishedAt)
-    }
 
     private fun loadCurrentState(): SettingsUiState = SettingsUiState(
         crmServerUrl = settingsStore.crmServerUrl.orEmpty(),
@@ -93,7 +65,7 @@ class SettingsViewModel(
     class Factory(private val context: Context, private val container: AppContainer) : ViewModelProvider.Factory {
         @Suppress("UNCHECKED_CAST")
         override fun <T : ViewModel> create(modelClass: Class<T>): T {
-            return SettingsViewModel(context.applicationContext, container.settingsStore, container.updateChecker) as T
+            return SettingsViewModel(context.applicationContext, container.settingsStore) as T
         }
     }
 }

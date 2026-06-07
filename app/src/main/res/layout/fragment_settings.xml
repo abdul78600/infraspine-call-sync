@@ -145,49 +145,8 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="@dimen/spacing_lg"
+            android:layout_marginBottom="@dimen/spacing_md"
             android:text="@string/save_settings" />
-
-        <View
-            android:layout_width="match_parent"
-            android:layout_height="1dp"
-            android:layout_marginVertical="@dimen/spacing_md"
-            android:background="@color/divider" />
-
-        <!-- App updates -->
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="@string/update_section_title"
-            android:textColor="@color/text_secondary"
-            android:textSize="13sp"
-            android:textStyle="bold"
-            android:layout_marginBottom="@dimen/spacing_sm" />
-
-        <TextView
-            android:id="@+id/textUpdateStatus"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginBottom="@dimen/spacing_sm"
-            android:textColor="@color/text_secondary"
-            android:textSize="13sp"
-            android:visibility="gone"
-            android:text="@string/update_up_to_date" />
-
-        <com.google.android.material.button.MaterialButton
-            android:id="@+id/buttonCheckForUpdates"
-            style="@style/Widget.MaterialComponents.Button.OutlinedButton"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="@string/check_for_updates" />
-
-        <com.google.android.material.button.MaterialButton
-            android:id="@+id/buttonDownloadUpdate"
-            style="@style/Widget.MaterialComponents.Button"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="@dimen/spacing_sm"
-            android:visibility="gone"
-            android:text="@string/update_download" />
 
     </LinearLayout>
 </androidx.core.widget.NestedScrollView>

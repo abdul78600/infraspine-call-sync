@@ -14,7 +14,6 @@ import com.infraspine.callsync.domain.util.NetworkMonitor
 import com.infraspine.callsync.scan.CallLogMatcher
 import com.infraspine.callsync.scan.RecordingFolderManager
 import com.infraspine.callsync.scan.RecordingScanner
-import com.infraspine.callsync.update.UpdateChecker
 
 /**
  * Minimal hand-rolled DI container — the app is small enough that a framework
@@ -63,8 +62,6 @@ class AppContainer(private val context: Context) {
             callLogMatcher = callLogMatcher
         )
     }
-
-    val updateChecker: UpdateChecker by lazy { UpdateChecker(context) }
 
     fun hasCallLogPermission(): Boolean =
         ContextCompat.checkSelfPermission(context, Manifest.permission.READ_CALL_LOG) ==

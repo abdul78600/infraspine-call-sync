@@ -48,14 +48,6 @@
     <string name="save_settings">Save Settings</string>
     <string name="settings_saved">Settings saved</string>
     <string name="folder_section_title">Recording Folder</string>
-    <string name="update_section_title">App Updates</string>
-    <string name="check_for_updates">Check for Updates</string>
-    <string name="checking_for_updates">Checking…</string>
-    <string name="update_up_to_date">You\'re running the latest build</string>
-    <string name="update_available_title">A new build is available</string>
-    <string name="update_available_message">Tap to open the download page in your browser, then install the new APK.</string>
-    <string name="update_download">Download update</string>
-    <string name="update_check_failed">Couldn\'t check for updates: %1$s</string>
     <string name="server_section_title">CRM Server</string>
     <string name="sync_section_title">Sync Options</string>
 

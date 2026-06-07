@@ -39,12 +39,11 @@ push a change to `main`, a fresh APK is built automatically and the **`latest`**
 release on GitHub is updated to point at it — so the download link above always
 serves the newest build without you having to hunt through Actions runs.
 
-**Checking for updates from inside the app:** open **Settings → App Updates →
-Check for Updates**. The app asks GitHub whether the `latest` release is newer than
-the build it last saw, and if so shows a **Download update** button that opens the
-stable link above in your browser — download and tap to install over the old version.
-This is a lightweight stand-in for Play Store auto-updates, intended for direct-APK
-distribution to agents (no Play Store account or signing key required).
+**Updating to a new build:** since this repo is private, the stable download link
+above only works for people with GitHub access (it returns 404 for anyone else —
+including from inside the app, so there's no in-app update checker). To update an
+agent's install, download `app-debug.apk` from the link yourself and send it to them
+— installing it over the old version upgrades in place and keeps their data.
 
 > This produces a **debug** build, which is fine for installing on agents' phones for
 > testing/internal use. A signed **release** build (for wider distribution / Play Store)
