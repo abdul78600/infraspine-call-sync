@@ -70,6 +70,10 @@ class DashboardFragment : Fragment() {
             findNavController().navigate(R.id.action_dashboard_to_recordings)
         }
 
+        binding.buttonViewCallHistory.setOnClickListener {
+            findNavController().navigate(R.id.action_dashboard_to_call_history)
+        }
+
         binding.buttonSettings.setOnClickListener {
             findNavController().navigate(R.id.action_dashboard_to_settings)
         }

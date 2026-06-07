@@ -16,6 +16,7 @@
     <string name="sync_now">Sync Now</string>
     <string name="settings">Settings</string>
     <string name="view_recordings">View Recordings</string>
+    <string name="view_call_history">View Call History</string>
 
     <!-- Recording list -->
     <string name="recordings_title">Recordings</string>
@@ -26,6 +27,12 @@
     <string name="filter_unmatched">Unmatched</string>
     <string name="unmatched_label">Unmatched</string>
     <string name="no_recordings_found">No recordings found. Tap \"Scan Now\" to scan the selected folder.</string>
+
+    <!-- Call history -->
+    <string name="call_history_title">Call History</string>
+    <string name="call_has_recording">Recorded</string>
+    <string name="call_no_recording">No recording</string>
+    <string name="no_call_history_found">No call history found on this device.</string>
 
     <!-- Settings -->
     <string name="settings_title">Settings</string>

@@ -7,6 +7,7 @@ import androidx.core.content.ContextCompat
 import com.infraspine.callsync.data.local.CallSyncDatabase
 import com.infraspine.callsync.data.prefs.SecureSettingsStore
 import com.infraspine.callsync.data.remote.CrmApiFactory
+import com.infraspine.callsync.data.repository.CallHistoryRepository
 import com.infraspine.callsync.data.repository.RecordingRepository
 import com.infraspine.callsync.data.repository.SyncRepository
 import com.infraspine.callsync.domain.util.NetworkMonitor
@@ -52,6 +53,13 @@ class AppContainer(private val context: Context) {
             settingsStore = settingsStore,
             networkMonitor = networkMonitor,
             apiFactory = apiFactory
+        )
+    }
+
+    val callHistoryRepository: CallHistoryRepository by lazy {
+        CallHistoryRepository(
+            dao = database.recordingDao(),
+            callLogMatcher = callLogMatcher
         )
     }
 

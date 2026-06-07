@@ -37,6 +37,14 @@ interface RecordingDao {
     @Query("SELECT * FROM recordings WHERE syncStatus = :status")
     suspend fun getByStatus(status: SyncStatus): List<RecordingEntity>
 
+    /**
+     * Distinct call-start timestamps that already have a matched recording —
+     * used by the Call History screen to flag which device call-log rows
+     * already produced a tracked recording, without loading full entities.
+     */
+    @Query("SELECT DISTINCT callStartedAt FROM recordings WHERE callStartedAt IS NOT NULL")
+    suspend fun getMatchedCallStartTimestamps(): List<Long>
+
     @Query("SELECT COUNT(*) FROM recordings")
     fun observeTotalCount(): Flow<Int>
 

@@ -166,6 +166,14 @@
                 android:text="@string/view_recordings" />
 
             <com.google.android.material.button.MaterialButton
+                android:id="@+id/buttonViewCallHistory"
+                style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/spacing_sm"
+                android:text="@string/view_call_history" />
+
+            <com.google.android.material.button.MaterialButton
                 android:id="@+id/buttonSettings"
                 style="@style/Widget.MaterialComponents.Button.TextButton"
                 android:layout_width="match_parent"
