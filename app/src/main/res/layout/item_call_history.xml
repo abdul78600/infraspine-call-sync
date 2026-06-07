@@ -6,8 +6,9 @@
     android:layout_height="wrap_content"
     android:layout_marginHorizontal="@dimen/spacing_md"
     android:layout_marginVertical="@dimen/spacing_xs"
-    app:cardCornerRadius="10dp"
-    app:cardElevation="1dp">
+    app:cardBackgroundColor="@color/surface"
+    app:cardCornerRadius="@dimen/card_radius"
+    app:cardElevation="2dp">
 
     <LinearLayout
         android:layout_width="match_parent"
@@ -20,6 +21,13 @@
             android:layout_height="wrap_content"
             android:orientation="horizontal"
             android:gravity="center_vertical">
+
+            <View
+                android:id="@+id/viewCallTypeIndicator"
+                android:layout_width="8dp"
+                android:layout_height="8dp"
+                android:layout_marginEnd="8dp"
+                android:background="@drawable/bg_call_type_dot" />
 
             <TextView
                 android:id="@+id/textPhoneNumber"
@@ -37,6 +45,7 @@
                 android:id="@+id/textRecordingStatus"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
+                android:layout_marginStart="6dp"
                 android:background="@drawable/bg_status_chip"
                 android:paddingHorizontal="10dp"
                 android:paddingVertical="3dp"
@@ -45,14 +54,35 @@
                 android:text="No recording" />
         </LinearLayout>
 
-        <TextView
-            android:id="@+id/textCallMeta"
+        <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="2dp"
-            android:textColor="@color/text_secondary"
-            android:textSize="13sp"
-            android:text="Missed • 8 Jun 2026, 10:32 AM • 0:00" />
+            android:layout_marginTop="6dp"
+            android:orientation="horizontal"
+            android:gravity="center_vertical">
+
+            <TextView
+                android:id="@+id/textCallType"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:background="@drawable/bg_status_chip"
+                android:paddingHorizontal="10dp"
+                android:paddingVertical="3dp"
+                android:textSize="11sp"
+                android:textStyle="bold"
+                android:text="Missed" />
+
+            <TextView
+                android:id="@+id/textCallMeta"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:layout_marginStart="8dp"
+                android:textColor="@color/text_secondary"
+                android:textSize="13sp"
+                android:text="8 Jun 2026, 10:32 AM • 0:00" />
+
+        </LinearLayout>
 
     </LinearLayout>
 </com.google.android.material.card.MaterialCardView>

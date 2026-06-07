@@ -21,6 +21,11 @@
     <color name="status_failed">#DC2626</color>
     <color name="status_unmatched">#6B7280</color>
 
+    <color name="call_incoming">#16A34A</color>
+    <color name="call_outgoing">#1A56DB</color>
+    <color name="call_missed">#DC2626</color>
+    <color name="call_unknown">#6B7280</color>
+
     <color name="divider">#E5E7EB</color>
     <color name="white">#FFFFFF</color>
     <color name="black">#000000</color>

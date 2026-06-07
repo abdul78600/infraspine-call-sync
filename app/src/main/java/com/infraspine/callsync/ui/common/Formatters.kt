@@ -55,5 +55,12 @@ fun CallType.displayLabel(context: Context): String = when (this) {
     CallType.UNKNOWN -> context.getString(R.string.call_unknown)
 }
 
+fun CallType.colorRes(): Int = when (this) {
+    CallType.INCOMING -> R.color.call_incoming
+    CallType.OUTGOING -> R.color.call_outgoing
+    CallType.MISSED -> R.color.call_missed
+    CallType.UNKNOWN -> R.color.call_unknown
+}
+
 fun String?.orUnmatched(context: Context): String =
     this?.takeIf { it.isNotBlank() } ?: context.getString(R.string.unmatched_label)

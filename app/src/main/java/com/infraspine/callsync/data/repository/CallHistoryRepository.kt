@@ -19,15 +19,20 @@ class CallHistoryRepository(
 ) {
 
     /**
-     * Returns every device call-log entry, newest first, each flagged with
-     * [CallHistoryEntry.hasRecording]. Requires READ_CALL_LOG — callers should
-     * check permission before invoking this (mirrors [RecordingRepository]'s pattern).
+     * Returns one page of the device call log (newest first), each entry flagged with
+     * [CallHistoryEntry.hasRecording]. Requires READ_CALL_LOG — callers should check
+     * permission before invoking this (mirrors [RecordingRepository]'s pattern).
+     *
+     * A page shorter than [limit] signals the end of the call log to callers doing
+     * infinite-scroll pagination.
      */
-    suspend fun loadCallHistory(): List<CallHistoryEntry> = withContext(Dispatchers.IO) {
-        val callLog = callLogMatcher.loadCallLog()
+    suspend fun loadCallHistoryPage(offset: Int, limit: Int): List<CallHistoryEntry> = withContext(Dispatchers.IO) {
+        val page = callLogMatcher.loadCallLogPage(offset, limit)
+        if (page.isEmpty()) return@withContext emptyList()
+
         val matchedTimestamps = dao.getMatchedCallStartTimestamps().toSet()
 
-        callLog.map { entry ->
+        page.map { entry ->
             CallHistoryEntry(
                 phoneNumber = entry.phoneNumber,
                 startedAt = entry.startedAt,
@@ -36,5 +41,9 @@ class CallHistoryRepository(
                 hasRecording = entry.startedAt in matchedTimestamps
             )
         }
+    }
+
+    companion object {
+        const val PAGE_SIZE = 50
     }
 }

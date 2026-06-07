@@ -1,6 +1,8 @@
 package com.infraspine.callsync.scan
 
 import android.content.Context
+import android.os.Build
+import android.os.Bundle
 import android.provider.CallLog
 import com.infraspine.callsync.domain.model.CallLogEntry
 import com.infraspine.callsync.domain.model.CallMatchResult
@@ -55,6 +57,65 @@ class CallLogMatcher(private val context: Context) {
                         durationSeconds = durationIdx.takeIf { it >= 0 }?.let { cursor.getLong(it) } ?: 0L,
                         callType = typeIdx.takeIf { it >= 0 }
                             ?.let { CallType.fromCallLogType(cursor.getInt(it)) }
+                            ?: CallType.UNKNOWN
+                    )
+                }
+            }
+        }
+
+        entries
+    }
+
+    /**
+     * Loads a single page of the device call log, newest first, for paginated UI lists.
+     * Uses [ContentResolver] query-argument bundles ([android.content.ContentResolver.QUERY_ARG_OFFSET] /
+     * [android.content.ContentResolver.QUERY_ARG_LIMIT]) so the content provider only returns
+     * the rows we need rather than the entire call history every time.
+     */
+    suspend fun loadCallLogPage(offset: Int, limit: Int): List<CallLogEntry> = withContext(Dispatchers.IO) {
+        val entries = mutableListOf<CallLogEntry>()
+        val projection = arrayOf(
+            CallLog.Calls.NUMBER,
+            CallLog.Calls.DATE,
+            CallLog.Calls.DURATION,
+            CallLog.Calls.TYPE
+        )
+
+        runCatching {
+            val cursor = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                val args = Bundle().apply {
+                    putStringArray(android.content.ContentResolver.QUERY_ARG_SORT_COLUMNS, arrayOf(CallLog.Calls.DATE))
+                    putInt(
+                        android.content.ContentResolver.QUERY_ARG_SORT_DIRECTION,
+                        android.content.ContentResolver.QUERY_SORT_DIRECTION_DESCENDING
+                    )
+                    putInt(android.content.ContentResolver.QUERY_ARG_OFFSET, offset)
+                    putInt(android.content.ContentResolver.QUERY_ARG_LIMIT, limit)
+                }
+                context.contentResolver.query(CallLog.Calls.CONTENT_URI, projection, args, null)
+            } else {
+                context.contentResolver.query(
+                    CallLog.Calls.CONTENT_URI,
+                    projection,
+                    null,
+                    null,
+                    "${CallLog.Calls.DATE} DESC LIMIT $limit OFFSET $offset"
+                )
+            }
+
+            cursor?.use {
+                val numberIdx = it.getColumnIndex(CallLog.Calls.NUMBER)
+                val dateIdx = it.getColumnIndex(CallLog.Calls.DATE)
+                val durationIdx = it.getColumnIndex(CallLog.Calls.DURATION)
+                val typeIdx = it.getColumnIndex(CallLog.Calls.TYPE)
+
+                while (it.moveToNext()) {
+                    entries += CallLogEntry(
+                        phoneNumber = numberIdx.takeIf { idx -> idx >= 0 }?.let { idx -> it.getString(idx) },
+                        startedAt = dateIdx.takeIf { idx -> idx >= 0 }?.let { idx -> it.getLong(idx) } ?: 0L,
+                        durationSeconds = durationIdx.takeIf { idx -> idx >= 0 }?.let { idx -> it.getLong(idx) } ?: 0L,
+                        callType = typeIdx.takeIf { idx -> idx >= 0 }
+                            ?.let { idx -> CallType.fromCallLogType(it.getInt(idx)) }
                             ?: CallType.UNKNOWN
                     )
                 }

@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="primary">#5B8DEF</color>
+    <color name="primary_dark">#0B1220</color>
+    <color name="primary_variant">#3B82F6</color>
+    <color name="on_primary">#FFFFFF</color>
+
+    <color name="secondary">#2DD4BF</color>
+    <color name="on_secondary">#053B36</color>
+
+    <color name="background">#10151F</color>
+    <color name="surface">#1E2530</color>
+    <color name="on_background">#E5E9F0</color>
+    <color name="on_surface">#E5E9F0</color>
+
+    <color name="text_primary">#F3F5F9</color>
+    <color name="text_secondary">#9AA4B2</color>
+
+    <color name="status_pending">#FBBF24</color>
+    <color name="status_synced">#4ADE80</color>
+    <color name="status_failed">#F87171</color>
+    <color name="status_unmatched">#9AA4B2</color>
+
+    <color name="call_incoming">#4ADE80</color>
+    <color name="call_outgoing">#5B8DEF</color>
+    <color name="call_missed">#F87171</color>
+    <color name="call_unknown">#9AA4B2</color>
+
+    <color name="divider">#2C3445</color>
+    <color name="white">#FFFFFF</color>
+    <color name="black">#000000</color>
+</resources>

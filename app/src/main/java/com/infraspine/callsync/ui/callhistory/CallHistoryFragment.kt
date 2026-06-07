@@ -9,6 +9,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.viewModels
 import androidx.recyclerview.widget.LinearLayoutManager
+import androidx.recyclerview.widget.RecyclerView
 import com.google.android.material.snackbar.Snackbar
 import com.infraspine.callsync.CallSyncApplication
 import com.infraspine.callsync.R
@@ -50,8 +51,19 @@ class CallHistoryFragment : Fragment() {
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
 
-        binding.recyclerCallHistory.layoutManager = LinearLayoutManager(requireContext())
+        val layoutManager = LinearLayoutManager(requireContext())
+        binding.recyclerCallHistory.layoutManager = layoutManager
         binding.recyclerCallHistory.adapter = adapter
+        binding.recyclerCallHistory.addOnScrollListener(object : RecyclerView.OnScrollListener() {
+            override fun onScrolled(recyclerView: RecyclerView, dx: Int, dy: Int) {
+                if (dy <= 0) return
+                val totalItemCount = layoutManager.itemCount
+                val lastVisible = layoutManager.findLastVisibleItemPosition()
+                if (lastVisible >= totalItemCount - LOAD_MORE_THRESHOLD) {
+                    viewModel.loadNextPage()
+                }
+            }
+        })
 
         binding.swipeRefresh.setOnRefreshListener { requestAndLoad(forceRefresh = true) }
 
@@ -86,6 +98,10 @@ class CallHistoryFragment : Fragment() {
             if (!loading) binding.swipeRefresh.isRefreshing = false
         }
 
+        viewModel.isLoadingMore.observe(viewLifecycleOwner) { loadingMore ->
+            binding.progressLoadMore.visibility = if (loadingMore) View.VISIBLE else View.GONE
+        }
+
         viewModel.message.observe(viewLifecycleOwner) { event ->
             event.getContentIfNotHandled()?.let { message ->
                 val text = when (message) {
@@ -100,5 +116,10 @@ class CallHistoryFragment : Fragment() {
     override fun onDestroyView() {
         super.onDestroyView()
         _binding = null
+    }
+
+    companion object {
+        /** Trigger the next page fetch when the user scrolls within this many items of the end. */
+        private const val LOAD_MORE_THRESHOLD = 10
     }
 }

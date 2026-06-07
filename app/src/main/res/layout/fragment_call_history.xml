@@ -39,6 +39,15 @@
             android:layout_gravity="center"
             android:visibility="gone" />
 
+        <ProgressBar
+            android:id="@+id/progressLoadMore"
+            style="?android:attr/progressBarStyleSmall"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="bottom|center_horizontal"
+            android:layout_marginBottom="@dimen/spacing_md"
+            android:visibility="gone" />
+
     </FrameLayout>
 
 </androidx.swiperefreshlayout.widget.SwipeRefreshLayout>
