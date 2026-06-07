@@ -5,6 +5,9 @@ on:
     branches: [ "**" ]
   workflow_dispatch: {}
 
+permissions:
+  contents: write
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -39,3 +42,19 @@ jobs:
           name: InfraSpine-Call-Sync-debug-apk
           path: app/build/outputs/apk/debug/app-debug.apk
           retention-days: 30
+
+      - name: Publish/update "latest" release with the APK
+        if: github.ref == 'refs/heads/main'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: latest
+          name: Latest build (${{ github.sha }})
+          body: |
+            Automatically published from commit ${{ github.sha }} on ${{ github.ref_name }}.
+            This is a debug build for internal/agent installs — not a Play Store release.
+
+            Download `app-debug.apk` below and install it on your device
+            (allow "Install unknown apps" when prompted).
+          prerelease: true
+          make_latest: true
+          files: app/build/outputs/apk/debug/app-debug.apk

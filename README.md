@@ -24,14 +24,27 @@ Android Studio or any SDK locally.
    git push -u origin main
    ```
 2. On GitHub, open the repo's **Actions** tab — a "Build APK" run starts automatically.
-3. When it finishes (a few minutes), open that run and scroll to **Artifacts**.
-4. Download **InfraSpine-Call-Sync-debug-apk** (a zip containing `app-debug.apk`).
-5. Copy `app-debug.apk` to your Android phone and tap it to install (you'll need to
+3. When it finishes (a few minutes), grab the APK either way:
+   - **Stable link (recommended for re-installs/updates)** — always points at the
+     newest build on `main`, same URL every time:
+     `https://github.com/<your-username>/<your-repo>/releases/download/latest/app-debug.apk`
+   - **Or from this specific run** — open the run and scroll to **Artifacts**, then
+     download **InfraSpine-Call-Sync-debug-apk** (a zip containing `app-debug.apk`).
+4. Copy `app-debug.apk` to your Android phone and tap it to install (you'll need to
    allow "Install unknown apps" for whichever app you used to open it — Settings will
    prompt you the first time).
 
 That's it — no SDK, no IDE, no command line on your machine. Every time you (or I)
-push a change, a fresh APK is built automatically and shows up in Actions → Artifacts.
+push a change to `main`, a fresh APK is built automatically and the **`latest`**
+release on GitHub is updated to point at it — so the download link above always
+serves the newest build without you having to hunt through Actions runs.
+
+**Checking for updates from inside the app:** open **Settings → App Updates →
+Check for Updates**. The app asks GitHub whether the `latest` release is newer than
+the build it last saw, and if so shows a **Download update** button that opens the
+stable link above in your browser — download and tap to install over the old version.
+This is a lightweight stand-in for Play Store auto-updates, intended for direct-APK
+distribution to agents (no Play Store account or signing key required).
 
 > This produces a **debug** build, which is fine for installing on agents' phones for
 > testing/internal use. A signed **release** build (for wider distribution / Play Store)
