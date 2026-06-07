@@ -14,5 +14,5 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "InfraSpine Call Sync"
+rootProject.name = "InfraSpine Recordings"
 include(":app")

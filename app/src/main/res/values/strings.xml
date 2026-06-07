@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">InfraSpine Call Sync</string>
+    <string name="app_name">InfraSpine Recordings</string>
 
     <!-- Dashboard -->
     <string name="dashboard_title">Dashboard</string>
@@ -54,7 +54,7 @@
     <string name="error_api_url_missing">CRM server URL is not configured. Recordings remain pending.</string>
     <string name="error_wifi_required">Sync is restricted to Wi-Fi. Connect to Wi-Fi and try again.</string>
     <string name="permission_required_title">Permission required</string>
-    <string name="permission_call_log_rationale">InfraSpine Call Sync needs Call Log access to match recordings with phone calls (number, time, duration, type).</string>
+    <string name="permission_call_log_rationale">InfraSpine Recordings needs Call Log access to match recordings with phone calls (number, time, duration, type).</string>
     <string name="grant_permission">Grant permission</string>
 
     <!-- Sync status labels -->

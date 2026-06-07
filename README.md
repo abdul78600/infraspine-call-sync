@@ -54,7 +54,7 @@ push a change, a fresh APK is built automatically and shows up in Actions → Ar
    distribution and the rest of the dependencies declared in `build.gradle.kts`.
 3. Connect a physical device (recommended — call logs and SAF folders behave more
    realistically than on emulators) or start an emulator with API 26+.
-4. Run the `app` configuration. The app installs as **InfraSpine Call Sync**.
+4. Run the `app` configuration. The app installs as **InfraSpine Recordings**.
 
 No `local.properties` secrets are required to build — the CRM URL and agent token
 are entered at runtime from the in-app **Settings** screen and stored on-device.
