@@ -1,0 +1,25 @@
+# Gradle build output
+.gradle/
+build/
+app/build/
+
+# Local configuration
+local.properties
+
+# Android Studio / IntelliJ project files
+.idea/
+*.iml
+.DS_Store
+
+# Generated APK / bundle output (CI produces these — no need to commit)
+*.apk
+*.aab
+
+# Captures, logs
+captures/
+.externalNativeBuild/
+.cxx/
+
+# Keystores (never commit signing keys)
+*.jks
+*.keystore

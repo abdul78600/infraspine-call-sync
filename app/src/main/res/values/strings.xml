@@ -1,0 +1,76 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">InfraSpine Call Sync</string>
+
+    <!-- Dashboard -->
+    <string name="dashboard_title">Dashboard</string>
+    <string name="selected_folder_label">Selected Folder</string>
+    <string name="no_folder_selected">No folder selected</string>
+    <string name="select_folder">Select Recording Folder</string>
+    <string name="change_folder">Change Folder</string>
+    <string name="total_recordings">Total Recordings</string>
+    <string name="pending_sync">Pending</string>
+    <string name="synced_count">Synced</string>
+    <string name="failed_count">Failed</string>
+    <string name="scan_now">Scan Now</string>
+    <string name="sync_now">Sync Now</string>
+    <string name="settings">Settings</string>
+    <string name="view_recordings">View Recordings</string>
+
+    <!-- Recording list -->
+    <string name="recordings_title">Recordings</string>
+    <string name="filter_all">All</string>
+    <string name="filter_pending">Pending</string>
+    <string name="filter_synced">Synced</string>
+    <string name="filter_failed">Failed</string>
+    <string name="filter_unmatched">Unmatched</string>
+    <string name="unmatched_label">Unmatched</string>
+    <string name="no_recordings_found">No recordings found. Tap \"Scan Now\" to scan the selected folder.</string>
+
+    <!-- Settings -->
+    <string name="settings_title">Settings</string>
+    <string name="crm_server_url">CRM Server URL</string>
+    <string name="crm_server_url_hint">https://your-crm.example.com</string>
+    <string name="agent_token">Agent Login / Token</string>
+    <string name="agent_token_hint">Enter agent token</string>
+    <string name="device_id">Device ID</string>
+    <string name="sync_wifi_only">Sync only on Wi-Fi</string>
+    <string name="auto_sync">Auto sync</string>
+    <string name="dummy_test_mode">Use dummy/test upload mode</string>
+    <string name="dummy_test_mode_summary">Simulates uploads locally without contacting the CRM server. Useful until CRM API is ready.</string>
+    <string name="save_settings">Save Settings</string>
+    <string name="settings_saved">Settings saved</string>
+    <string name="folder_section_title">Recording Folder</string>
+    <string name="server_section_title">CRM Server</string>
+    <string name="sync_section_title">Sync Options</string>
+
+    <!-- Errors / status messages -->
+    <string name="error_no_folder">Please select a recording folder first</string>
+    <string name="error_call_log_permission">Call log permission denied. Recordings cannot be matched to calls.</string>
+    <string name="error_no_recordings">No audio recordings found in the selected folder</string>
+    <string name="error_duplicate_file">This recording was already added, skipping duplicate</string>
+    <string name="error_upload_failed">Upload failed</string>
+    <string name="error_network_unavailable">Network unavailable. Will retry later.</string>
+    <string name="error_api_url_missing">CRM server URL is not configured. Recordings remain pending.</string>
+    <string name="error_wifi_required">Sync is restricted to Wi-Fi. Connect to Wi-Fi and try again.</string>
+    <string name="permission_required_title">Permission required</string>
+    <string name="permission_call_log_rationale">InfraSpine Call Sync needs Call Log access to match recordings with phone calls (number, time, duration, type).</string>
+    <string name="grant_permission">Grant permission</string>
+
+    <!-- Sync status labels -->
+    <string name="status_pending">Pending</string>
+    <string name="status_synced">Synced</string>
+    <string name="status_failed">Failed</string>
+    <string name="status_unmatched">Unmatched</string>
+
+    <!-- Call types -->
+    <string name="call_incoming">Incoming</string>
+    <string name="call_outgoing">Outgoing</string>
+    <string name="call_missed">Missed</string>
+    <string name="call_unknown">Unknown</string>
+
+    <string name="scan_complete">Scan complete: %1$d recording(s) found</string>
+    <string name="sync_complete">Sync complete: %1$d uploaded, %2$d failed</string>
+    <string name="sync_in_progress">Syncing…</string>
+    <string name="scan_in_progress">Scanning…</string>
+</resources>
