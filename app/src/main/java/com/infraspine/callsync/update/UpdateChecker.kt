@@ -103,8 +103,14 @@ class UpdateChecker(context: Context) {
         private const val GITHUB_OWNER = "abdul78600"
         private const val GITHUB_REPO = "infraspine-call-sync"
 
+        /**
+         * Fetches by tag name rather than GitHub's "latest release" endpoint —
+         * that endpoint deliberately excludes pre-releases/drafts, and the build
+         * workflow publishes the `latest` tag as a pre-release (it's a debug build,
+         * not a store-ready release), which made it 404 for everyone.
+         */
         private const val LATEST_RELEASE_API_URL =
-            "https://api.github.com/repos/$GITHUB_OWNER/$GITHUB_REPO/releases/latest"
+            "https://api.github.com/repos/$GITHUB_OWNER/$GITHUB_REPO/releases/tags/latest"
 
         /** Stable URL that always resolves to the newest APK published under the `latest` release tag. */
         const val STABLE_APK_DOWNLOAD_URL =
