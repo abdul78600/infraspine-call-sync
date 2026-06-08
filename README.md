@@ -39,10 +39,8 @@ push a change to `main`, a fresh APK is built automatically and the **`latest`**
 release on GitHub is updated to point at it — so the download link above always
 serves the newest build without you having to hunt through Actions runs.
 
-**Updating to a new build:** since this repo is private, the stable download link
-above only works for people with GitHub access (it returns 404 for anyone else —
-including from inside the app, so there's no in-app update checker). To update an
-agent's install, download `app-release.apk` from the link yourself and send it to them.
+**Updating to a new build:** download `app-release.apk` from the stable link above
+and send it to the agent whose install needs updating.
 Installing it over the old version upgrades in place and keeps their data only when
 the installed APK has the same package name (`com.infraspine.callsync`) and the same
 internal release signing key.
