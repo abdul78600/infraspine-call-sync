@@ -36,7 +36,8 @@ sealed class DashboardMessage {
         val failed: Int,
         val callLogsUploaded: Int,
         val callLogsSkipped: Int,
-        val callLogsFailed: Int
+        val callLogsFailed: Int,
+        val callLogsError: String?
     ) : DashboardMessage()
     object SyncNothingPending : DashboardMessage()
     object SyncNetworkUnavailable : DashboardMessage()
@@ -109,7 +110,8 @@ class DashboardViewModel(
                         failed = result.failed,
                         callLogsUploaded = result.callLogsUploaded,
                         callLogsSkipped = result.callLogsSkipped,
-                        callLogsFailed = result.callLogsFailed
+                        callLogsFailed = result.callLogsFailed,
+                        callLogsError = result.callLogsError
                     )
                     SyncResult.NothingToSync -> DashboardMessage.SyncNothingPending
                     SyncResult.NetworkUnavailable -> DashboardMessage.SyncNetworkUnavailable

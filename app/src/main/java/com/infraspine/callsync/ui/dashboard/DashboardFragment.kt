@@ -168,14 +168,17 @@ class DashboardFragment : Fragment() {
             DashboardMessage.ScanCallLogPermissionDenied -> getString(R.string.error_call_log_permission)
             is DashboardMessage.ScanError -> message.message
 
-            is DashboardMessage.SyncFinished -> getString(
-                R.string.sync_complete,
-                message.uploaded,
-                message.failed,
-                message.callLogsUploaded,
-                message.callLogsSkipped,
-                message.callLogsFailed
-            )
+            is DashboardMessage.SyncFinished -> {
+                val summary = getString(
+                    R.string.sync_complete,
+                    message.uploaded,
+                    message.failed,
+                    message.callLogsUploaded,
+                    message.callLogsSkipped,
+                    message.callLogsFailed
+                )
+                message.callLogsError?.takeIf { it.isNotBlank() }?.let { "$summary $it" } ?: summary
+            }
             DashboardMessage.SyncNothingPending -> getString(R.string.status_pending) + ": 0"
             DashboardMessage.SyncNetworkUnavailable -> getString(R.string.error_network_unavailable)
             DashboardMessage.SyncWifiRequired -> getString(R.string.error_wifi_required)

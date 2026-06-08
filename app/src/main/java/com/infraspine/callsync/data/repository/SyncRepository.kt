@@ -6,6 +6,7 @@ import com.infraspine.callsync.data.prefs.SecureSettingsStore
 import com.infraspine.callsync.data.remote.CrmApiFactory
 import com.infraspine.callsync.data.remote.CallLogSyncItem
 import com.infraspine.callsync.data.remote.CallLogsSyncRequest
+import com.infraspine.callsync.data.remote.CrmApiService
 import com.infraspine.callsync.data.remote.DummyCrmUploader
 import com.infraspine.callsync.data.remote.RealCrmUploader
 import com.infraspine.callsync.data.remote.RecordingUploader
@@ -29,7 +30,8 @@ sealed class SyncResult {
         val failed: Int,
         val callLogsUploaded: Int = 0,
         val callLogsSkipped: Int = 0,
-        val callLogsFailed: Int = 0
+        val callLogsFailed: Int = 0,
+        val callLogsError: String? = null
     ) : SyncResult()
     object NothingToSync : SyncResult()
     object NetworkUnavailable : SyncResult()
@@ -129,7 +131,8 @@ class SyncRepository(
                 failed = failedCount,
                 callLogsUploaded = callLogResult.uploaded,
                 callLogsSkipped = callLogResult.skipped,
-                callLogsFailed = callLogResult.failed
+                callLogsFailed = callLogResult.failed,
+                callLogsError = callLogResult.errorMessage
             )
         } else {
             SyncResult.NothingToSync
@@ -185,11 +188,7 @@ class SyncRepository(
         }
 
         return try {
-            val response = api.syncCallLogs(
-                CallLogsSyncRequest(
-                    logs = payload
-                )
-            )
+            val response = api.syncCallLogs(CallLogsSyncRequest(logs = payload))
 
             if (response.isSuccessful) {
                 settingsStore.lastSyncedCallLogId = maxFetchedId
@@ -206,15 +205,81 @@ class SyncRepository(
                 NetworkDiagnostics.logConnectionFailure(
                     NetworkDiagnostics.classify(httpCode = response.code(), serverMessage = serverMessage)
                 )
+
+                if (response.code() == 400) {
+                    return syncCallLogsIndividually(
+                        api = api,
+                        payload = payload,
+                        totalFetched = fetched.size,
+                        alreadySkipped = skipped,
+                        previousCursor = lastSyncedId,
+                        maxFetchedId = maxFetchedId,
+                        batchErrorMessage = serverMessage
+                    )
+                }
+
                 NetworkDiagnostics.logCallLogSync(fetched.size, 0, skipped, uploadable.size, lastSyncedId)
-                CallLogSyncStats(skipped = skipped, failed = uploadable.size)
+                CallLogSyncStats(skipped = skipped, failed = uploadable.size, errorMessage = serverMessage)
             }
         } catch (io: IOException) {
             val message = NetworkDiagnostics.classify(throwable = io)
             NetworkDiagnostics.logConnectionFailure(message)
             NetworkDiagnostics.logCallLogSync(fetched.size, 0, skipped, uploadable.size, lastSyncedId)
-            CallLogSyncStats(skipped = skipped, failed = uploadable.size)
+            CallLogSyncStats(skipped = skipped, failed = uploadable.size, errorMessage = message)
         }
+    }
+
+    private suspend fun syncCallLogsIndividually(
+        api: CrmApiService,
+        payload: List<CallLogSyncItem>,
+        totalFetched: Int,
+        alreadySkipped: Int,
+        previousCursor: Long,
+        maxFetchedId: Long,
+        batchErrorMessage: String?
+    ): CallLogSyncStats {
+        var uploaded = 0
+        var failed = 0
+        var firstError: String? = null
+
+        for (item in payload) {
+            val response = try {
+                api.syncCallLogs(CallLogsSyncRequest(logs = listOf(item)))
+            } catch (error: IOException) {
+                failed++
+                if (firstError == null) firstError = NetworkDiagnostics.classify(throwable = error)
+                continue
+            }
+
+            if (response.isSuccessful) {
+                uploaded++
+            } else {
+                failed++
+                val rawBody = runCatching { response.errorBody()?.string() }.getOrNull()
+                NetworkDiagnostics.logCallLogSyncResponse(response.code(), rawBody)
+                val serverMessage = UploadErrorParser.extractMessage(rawBody)
+                if (firstError == null) firstError = serverMessage ?: "Server rejected call log ${item.externalCallId}"
+            }
+        }
+
+        if (uploaded > 0) {
+            settingsStore.lastSyncedCallLogId = maxFetchedId
+        }
+
+        NetworkDiagnostics.logCallLogSync(
+            totalFetched = totalFetched,
+            uploaded = uploaded,
+            skipped = alreadySkipped,
+            failed = failed,
+            lastSyncedCallLogId = settingsStore.lastSyncedCallLogId
+        )
+
+        return CallLogSyncStats(
+            uploaded = uploaded,
+            skipped = alreadySkipped,
+            failed = failed,
+            errorMessage = if (failed > 0) firstError ?: batchErrorMessage else null
+        )
     }
 
     private fun MobileCallLog.isUploadable(): Boolean =
@@ -259,5 +324,6 @@ class SyncRepository(
 data class CallLogSyncStats(
     val uploaded: Int = 0,
     val skipped: Int = 0,
-    val failed: Int = 0
+    val failed: Int = 0,
+    val errorMessage: String? = null
 )
