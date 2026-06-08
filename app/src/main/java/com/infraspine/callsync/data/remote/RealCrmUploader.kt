@@ -3,6 +3,7 @@ package com.infraspine.callsync.data.remote
 import android.content.Context
 import android.net.Uri
 import com.infraspine.callsync.data.local.entity.RecordingEntity
+import com.infraspine.callsync.domain.util.NetworkDiagnostics
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaTypeOrNull
@@ -60,10 +61,12 @@ class RealCrmUploader(
                     val body = response.body()
                     UploadOutcome.Success(serverRecordingId = body?.recordingId)
                 } else {
-                    UploadOutcome.Failure("Server responded with ${response.code()}")
+                    UploadOutcome.Failure(NetworkDiagnostics.classify(httpCode = response.code()))
                 }
             } catch (io: IOException) {
-                UploadOutcome.Failure("Network error: ${io.message ?: "request failed"}")
+                val message = NetworkDiagnostics.classify(throwable = io)
+                NetworkDiagnostics.logConnectionFailure(message)
+                UploadOutcome.Failure(message)
             } finally {
                 tempFile.delete()
             }

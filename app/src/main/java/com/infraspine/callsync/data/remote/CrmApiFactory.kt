@@ -1,6 +1,7 @@
 package com.infraspine.callsync.data.remote
 
 import com.infraspine.callsync.data.prefs.SecureSettingsStore
+import com.infraspine.callsync.domain.util.NetworkDiagnostics
 import okhttp3.Interceptor
 import okhttp3.OkHttpClient
 import okhttp3.Response
@@ -32,6 +33,8 @@ class CrmApiFactory(private val settingsStore: SecureSettingsStore) {
         val normalized = if (baseUrl.endsWith("/")) baseUrl else "$baseUrl/"
 
         cachedService?.let { if (cachedBaseUrl == normalized) return it }
+
+        NetworkDiagnostics.logConfiguredServer(normalized)
 
         val client = OkHttpClient.Builder()
             .connectTimeout(30, TimeUnit.SECONDS)
