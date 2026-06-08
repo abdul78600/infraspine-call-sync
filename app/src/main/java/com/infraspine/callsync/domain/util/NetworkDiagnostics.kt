@@ -42,15 +42,22 @@ object NetworkDiagnostics {
      * the exception thrown while performing the request (or null for an HTTP error
      * response, in which case [httpCode] should be supplied instead).
      *
+     * [serverMessage] — when present (extracted from the response body by
+     * [UploadErrorParser]) — is shown instead of the generic per-code text, so
+     * validation errors like "file is required" or "phoneNumber invalid" reach
+     * the user verbatim rather than as "Server responded with 400".
+     *
      * The returned message never includes request/response bodies or headers, so the
      * Authorization header can never leak through error reporting.
      */
-    fun classify(throwable: Throwable? = null, httpCode: Int? = null): String {
+    fun classify(throwable: Throwable? = null, httpCode: Int? = null, serverMessage: String? = null): String {
         if (httpCode != null) {
+            val message = serverMessage?.takeIf { it.isNotBlank() }
             return when (httpCode) {
-                401 -> "Unauthorized — check the agent token in Settings"
-                403 -> "Forbidden — this device is not allowed to upload"
-                else -> "Server responded with $httpCode"
+                401 -> message ?: "Unauthorized — check the agent token in Settings"
+                403 -> message ?: "Forbidden — this device is not allowed to upload"
+                400 -> message ?: "Server rejected the upload (400) — no validation details returned"
+                else -> if (message != null) "Server responded with $httpCode: $message" else "Server responded with $httpCode"
             }
         }
 
@@ -77,6 +84,36 @@ object NetworkDiagnostics {
     /** Logs a connection failure with its category — never the raw exception, which could echo the request URL. */
     fun logConnectionFailure(category: String) {
         Log.w(TAG, "Upload connection failed: $category")
+    }
+
+    /**
+     * Logs every field that goes into the multipart upload request, plus the final
+     * resolved URL — but never the Authorization header/agent token. Intended to make
+     * "why did the server reject this with a 400" diagnosable from logcat alone.
+     */
+    fun logUploadRequest(
+        fileName: String,
+        fileSize: Long,
+        mimeType: String?,
+        fileExtension: String,
+        phoneNumber: String?,
+        callStartedAt: Long?,
+        durationSeconds: Long?,
+        callType: String,
+        deviceId: String,
+        uploadUrl: String
+    ) {
+        Log.d(
+            TAG,
+            "Upload request: fileName=$fileName fileSize=$fileSize mimeType=$mimeType " +
+                "extension=$fileExtension phoneNumber=$phoneNumber callStartedAt=$callStartedAt " +
+                "durationSeconds=$durationSeconds callType=$callType deviceId=$deviceId url=$uploadUrl"
+        )
+    }
+
+    /** Logs the raw HTTP status and response body for a completed (non-exceptional) upload response. */
+    fun logUploadResponse(httpCode: Int, rawBody: String?) {
+        Log.d(TAG, "Upload response: status=$httpCode body=${rawBody?.takeIf { it.isNotBlank() } ?: "<empty>"}")
     }
 
     /**

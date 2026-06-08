@@ -3,7 +3,9 @@ package com.infraspine.callsync.data.remote
 import android.content.Context
 import android.net.Uri
 import com.infraspine.callsync.data.local.entity.RecordingEntity
+import com.infraspine.callsync.data.prefs.SecureSettingsStore
 import com.infraspine.callsync.domain.util.NetworkDiagnostics
+import com.infraspine.callsync.domain.util.UploadErrorParser
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaTypeOrNull
@@ -25,6 +27,7 @@ import java.io.IOException
  */
 class RealCrmUploader(
     private val context: Context,
+    private val settingsStore: SecureSettingsStore,
     private val apiServiceProvider: () -> CrmApiService?
 ) : RecordingUploader {
 
@@ -47,6 +50,19 @@ class RealCrmUploader(
                     tempFile.asRequestBody(mediaType)
                 )
 
+                NetworkDiagnostics.logUploadRequest(
+                    fileName = recording.fileName,
+                    fileSize = recording.fileSize,
+                    mimeType = recording.mimeType,
+                    fileExtension = recording.fileName.substringAfterLast('.', missingDelimiterValue = ""),
+                    phoneNumber = recording.phoneNumber,
+                    callStartedAt = recording.callStartedAt,
+                    durationSeconds = recording.durationSeconds,
+                    callType = recording.callType.name,
+                    deviceId = deviceId,
+                    uploadUrl = resolvedUploadUrl()
+                )
+
                 val response = api.uploadCallRecording(
                     file = filePart,
                     phoneNumber = recording.phoneNumber?.toPlainTextBody(),
@@ -61,7 +77,10 @@ class RealCrmUploader(
                     val body = response.body()
                     UploadOutcome.Success(serverRecordingId = body?.recordingId)
                 } else {
-                    UploadOutcome.Failure(NetworkDiagnostics.classify(httpCode = response.code()))
+                    val rawBody = runCatching { response.errorBody()?.string() }.getOrNull()
+                    NetworkDiagnostics.logUploadResponse(response.code(), rawBody)
+                    val serverMessage = UploadErrorParser.extractMessage(rawBody)
+                    UploadOutcome.Failure(NetworkDiagnostics.classify(httpCode = response.code(), serverMessage = serverMessage))
                 }
             } catch (io: IOException) {
                 val message = NetworkDiagnostics.classify(throwable = io)
@@ -71,6 +90,17 @@ class RealCrmUploader(
                 tempFile.delete()
             }
         }
+
+    /**
+     * Mirrors the base-URL normalization in [CrmApiFactory.getService] (Retrofit
+     * requires a trailing slash on the base URL to resolve relative `@POST` paths
+     * correctly) so the logged URL matches exactly what Retrofit sends the request to.
+     */
+    private fun resolvedUploadUrl(): String {
+        val configured = settingsStore.crmServerUrl?.takeIf { it.isNotBlank() } ?: return UPLOAD_PATH
+        val normalized = if (configured.endsWith("/")) configured else "$configured/"
+        return normalized + UPLOAD_PATH
+    }
 
     private fun copyToCache(recording: RecordingEntity): File? {
         val uri = Uri.parse(recording.fileUri)
@@ -87,4 +117,9 @@ class RealCrmUploader(
     }
 
     private fun String.toPlainTextBody(): RequestBody = toRequestBody("text/plain".toMediaTypeOrNull())
+
+    private companion object {
+        /** Must match the path in [CrmApiService.uploadCallRecording]'s `@POST` annotation. */
+        const val UPLOAD_PATH = "api/crm/call-recordings/upload"
+    }
 }

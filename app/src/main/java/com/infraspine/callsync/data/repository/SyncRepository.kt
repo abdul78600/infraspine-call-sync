@@ -41,7 +41,7 @@ class SyncRepository(
 
     private val dummyUploader: RecordingUploader by lazy { DummyCrmUploader() }
     private val realUploader: RecordingUploader by lazy {
-        RealCrmUploader(context.applicationContext) { apiFactory.getService() }
+        RealCrmUploader(context.applicationContext, settingsStore) { apiFactory.getService() }
     }
 
     suspend fun syncPending(): SyncResult {
