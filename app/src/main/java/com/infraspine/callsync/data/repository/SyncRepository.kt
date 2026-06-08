@@ -168,6 +168,15 @@ class SyncRepository(
         val uploadable = fetched.filter { it.isUploadable() }
         val skipped = fetched.size - uploadable.size
         val maxFetchedId = fetched.maxOf { it.id }
+        val payload = uploadable.map { it.toSyncItem(deviceId) }
+        NetworkDiagnostics.logCallLogSyncRequest(
+            totalFetched = fetched.size,
+            uploadable = payload.size,
+            skipped = skipped,
+            sample = payload.take(3).joinToString(prefix = "[", postfix = "]") {
+                "{id=${it.externalCallId}, type=${it.callType}, startedAt=${it.callStartedAt}, hasPhone=${it.phoneNumber.isNotBlank()}}"
+            }
+        )
 
         if (uploadable.isEmpty()) {
             settingsStore.lastSyncedCallLogId = maxFetchedId
@@ -178,7 +187,7 @@ class SyncRepository(
         return try {
             val response = api.syncCallLogs(
                 CallLogsSyncRequest(
-                    logs = uploadable.map { it.toSyncItem(deviceId) }
+                    logs = payload
                 )
             )
 
@@ -209,17 +218,23 @@ class SyncRepository(
     }
 
     private fun MobileCallLog.isUploadable(): Boolean =
-        callType != CallType.UNKNOWN && startedAt > 0L
+        callType != CallType.UNKNOWN && startedAt > 0L && normalizedPhoneNumber() != null
 
     private fun MobileCallLog.toSyncItem(deviceId: String): CallLogSyncItem =
         CallLogSyncItem(
             externalCallId = id.toString(),
-            phoneNumber = phoneNumber,
+            phoneNumber = normalizedPhoneNumber().orEmpty(),
             callStartedAt = startedAt.toIso8601(),
             durationSeconds = durationSeconds,
             callType = callType.apiValue(),
             deviceId = deviceId
         )
+
+    private fun MobileCallLog.normalizedPhoneNumber(): String? {
+        val value = phoneNumber?.trim()?.takeIf { it.isNotEmpty() } ?: return null
+        if (value.lowercase() in NON_UPLOADABLE_PHONE_NUMBERS) return null
+        return value.takeIf { candidate -> candidate.any { it.isDigit() } }
+    }
 
     private fun Long.toIso8601(): String =
         ISO_MILLIS_UTC.format(Instant.ofEpochMilli(this))
@@ -227,6 +242,17 @@ class SyncRepository(
     companion object {
         val ISO_MILLIS_UTC: DateTimeFormatter =
             DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'").withZone(ZoneOffset.UTC)
+
+        val NON_UPLOADABLE_PHONE_NUMBERS = setOf(
+            "-1",
+            "-2",
+            "anonymous",
+            "private",
+            "private number",
+            "restricted",
+            "unavailable",
+            "unknown"
+        )
     }
 }
 

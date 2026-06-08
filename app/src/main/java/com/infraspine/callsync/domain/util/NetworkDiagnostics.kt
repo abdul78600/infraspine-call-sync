@@ -135,6 +135,14 @@ object NetworkDiagnostics {
         )
     }
 
+    fun logCallLogSyncRequest(totalFetched: Int, uploadable: Int, skipped: Int, sample: String) {
+        Log.d(
+            TAG,
+            "Call log sync request: totalFetched=$totalFetched uploadable=$uploadable " +
+                "skipped=$skipped sample=$sample"
+        )
+    }
+
     fun logCallLogSyncResponse(httpCode: Int, rawBody: String?) {
         Log.d(TAG, "Call log sync response: status=$httpCode serverErrorBody=${rawBody?.takeIf { it.isNotBlank() } ?: "<empty>"}")
     }

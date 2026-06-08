@@ -56,7 +56,7 @@ data class CallLogsSyncRequest(
 
 data class CallLogSyncItem(
     val externalCallId: String,
-    val phoneNumber: String?,
+    val phoneNumber: String,
     val callStartedAt: String,
     val durationSeconds: Long,
     val callType: String,
