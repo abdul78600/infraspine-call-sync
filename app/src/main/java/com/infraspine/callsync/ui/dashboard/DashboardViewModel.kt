@@ -13,7 +13,6 @@ import com.infraspine.callsync.data.repository.ScanResult
 import com.infraspine.callsync.data.repository.SyncRepository
 import com.infraspine.callsync.data.repository.SyncResult
 import com.infraspine.callsync.domain.model.SyncStatus
-import com.infraspine.callsync.scan.RecordingFolderManager
 import com.infraspine.callsync.ui.common.Event
 import kotlinx.coroutines.launch
 
@@ -41,8 +40,7 @@ sealed class DashboardMessage {
 
 class DashboardViewModel(
     private val recordingRepository: RecordingRepository,
-    private val syncRepository: SyncRepository,
-    private val folderManager: RecordingFolderManager
+    private val syncRepository: SyncRepository
 ) : ViewModel() {
 
     private val _isScanning = MutableLiveData(false)
@@ -71,10 +69,6 @@ class DashboardViewModel(
         addSource(recordingRepository.observeCountByStatus(SyncStatus.FAILED).asLiveData()) { failed = it; emit() }
         addSource(recordingRepository.observeCountByStatus(SyncStatus.UNMATCHED).asLiveData()) { unmatched = it; emit() }
     }
-
-    fun currentFolderLabel(): String? = folderManager.currentFolderDisplayPath()
-
-    fun hasFolderSelected(): Boolean = folderManager.hasValidFolderSelection()
 
     fun scanNow() {
         if (_isScanning.value == true) return
@@ -119,8 +113,7 @@ class DashboardViewModel(
         override fun <T : ViewModel> create(modelClass: Class<T>): T {
             return DashboardViewModel(
                 container.recordingRepository,
-                container.syncRepository,
-                container.folderManager
+                container.syncRepository
             ) as T
         }
     }

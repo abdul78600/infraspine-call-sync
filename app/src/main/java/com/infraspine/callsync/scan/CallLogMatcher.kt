@@ -69,22 +69,19 @@ class CallLogMatcher(private val context: Context) {
     /**
      * Loads a single page of the device call log, newest first, for paginated UI lists.
      *
-     * Tries [ContentResolver] query-argument bundles ([android.content.ContentResolver.QUERY_ARG_OFFSET] /
-     * [android.content.ContentResolver.QUERY_ARG_LIMIT]) first so the content provider only
-     * returns the rows we need. Some OEM call-log providers silently ignore these Bundle args
-     * and return the *entire* call log regardless — when that happens (result has more rows
-     * than requested), we fall back to slicing the full list ourselves so pagination still
-     * behaves correctly everywhere.
+     * Many OEM call-log providers silently ignore the requested OFFSET (some honor LIMIT,
+     * some ignore both) and just return the same leading rows every time, which made
+     * "load more" appear to do nothing — every page looked identical to the first.
+     * LIMIT-only queries are reliably honored across providers, so we always query rows
+     * [0, offset+limit) from the top and slice the requested window out client-side.
+     * The device call log is small enough (thousands of rows at most) that re-querying
+     * a growing prefix per page is cheap compared to the correctness this buys us.
      */
     suspend fun loadCallLogPage(offset: Int, limit: Int): List<CallLogEntry> = withContext(Dispatchers.IO) {
-        val queried = queryCallLog(offset, limit)
-        if (queried.size <= limit) return@withContext queried
-
-        // Provider ignored offset/limit and returned everything — slice it client-side.
-        queried.drop(offset).take(limit)
+        queryCallLog(limit = offset + limit).drop(offset).take(limit)
     }
 
-    private fun queryCallLog(offset: Int, limit: Int): List<CallLogEntry> {
+    private fun queryCallLog(limit: Int): List<CallLogEntry> {
         val entries = mutableListOf<CallLogEntry>()
         val projection = arrayOf(
             CallLog.Calls.NUMBER,
@@ -101,7 +98,6 @@ class CallLogMatcher(private val context: Context) {
                         android.content.ContentResolver.QUERY_ARG_SORT_DIRECTION,
                         android.content.ContentResolver.QUERY_SORT_DIRECTION_DESCENDING
                     )
-                    putInt(android.content.ContentResolver.QUERY_ARG_OFFSET, offset)
                     putInt(android.content.ContentResolver.QUERY_ARG_LIMIT, limit)
                 }
                 context.contentResolver.query(CallLog.Calls.CONTENT_URI, projection, args, null)
@@ -111,7 +107,7 @@ class CallLogMatcher(private val context: Context) {
                     projection,
                     null,
                     null,
-                    "${CallLog.Calls.DATE} DESC LIMIT $limit OFFSET $offset"
+                    "${CallLog.Calls.DATE} DESC LIMIT $limit"
                 )
             }
 

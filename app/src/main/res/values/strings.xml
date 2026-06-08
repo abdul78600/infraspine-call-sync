@@ -4,7 +4,8 @@
 
     <!-- Dashboard -->
     <string name="dashboard_title">Dashboard</string>
-    <string name="selected_folder_label">Selected Folder</string>
+    <string name="dashboard_overview_title">Overview</string>
+    <string name="dashboard_overview_subtitle">Tap a card to view those recordings</string>
     <string name="no_folder_selected">No folder selected</string>
     <string name="select_folder">Select Recording Folder</string>
     <string name="change_folder">Change Folder</string>
@@ -12,6 +13,10 @@
     <string name="pending_sync">Pending</string>
     <string name="synced_count">Synced</string>
     <string name="failed_count">Failed</string>
+    <string name="sync_status_label">Sync Status</string>
+    <string name="sync_status_pending_count">%1$d recording(s) waiting to sync</string>
+    <string name="sync_status_all_synced">All recordings are synced</string>
+    <string name="sync_status_no_recordings">No recordings yet — run a scan to get started</string>
     <string name="scan_now">Scan Now</string>
     <string name="sync_now">Sync Now</string>
     <string name="settings">Settings</string>

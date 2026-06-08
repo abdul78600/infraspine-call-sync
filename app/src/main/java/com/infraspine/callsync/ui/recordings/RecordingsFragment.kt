@@ -6,6 +6,7 @@ import android.text.TextWatcher
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import androidx.core.os.bundleOf
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.viewModels
 import androidx.navigation.fragment.findNavController
@@ -48,6 +49,8 @@ class RecordingsFragment : Fragment() {
         binding.recyclerRecordings.layoutManager = LinearLayoutManager(requireContext())
         binding.recyclerRecordings.adapter = adapter
 
+        applyInitialFilterFromArgs()
+
         binding.editSearch.addTextChangedListener(object : TextWatcher {
             override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) = Unit
             override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) = Unit
@@ -85,8 +88,35 @@ class RecordingsFragment : Fragment() {
         }
     }
 
+    /**
+     * Honors a filter requested by the caller (e.g. tapping a Dashboard summary card) by
+     * pre-selecting the matching chip. [RecordingsViewModel] picks up the resulting
+     * `setFilter` call from the chip's checked-state listener — no separate wiring needed.
+     */
+    private fun applyInitialFilterFromArgs() {
+        val requested = arguments?.getString(ARG_FILTER)?.let { name ->
+            runCatching { RecordingFilter.valueOf(name) }.getOrNull()
+        } ?: return
+
+        val chipId = when (requested) {
+            RecordingFilter.ALL -> binding.chipAll.id
+            RecordingFilter.PENDING -> binding.chipPending.id
+            RecordingFilter.SYNCED -> binding.chipSynced.id
+            RecordingFilter.FAILED -> binding.chipFailed.id
+            RecordingFilter.UNMATCHED -> binding.chipUnmatched.id
+        }
+        binding.chipGroupFilter.check(chipId)
+    }
+
     override fun onDestroyView() {
         super.onDestroyView()
         _binding = null
+    }
+
+    companion object {
+        private const val ARG_FILTER = "filter"
+
+        /** Bundle requesting [RecordingsFragment] open pre-filtered to [filter]. */
+        fun args(filter: RecordingFilter): Bundle = bundleOf(ARG_FILTER to filter.name)
     }
 }

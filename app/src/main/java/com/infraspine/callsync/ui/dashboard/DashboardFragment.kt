@@ -1,7 +1,6 @@
 package com.infraspine.callsync.ui.dashboard
 
 import android.Manifest
-import android.net.Uri
 import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
@@ -15,6 +14,8 @@ import com.infraspine.callsync.CallSyncApplication
 import com.infraspine.callsync.R
 import com.infraspine.callsync.databinding.FragmentDashboardBinding
 import com.infraspine.callsync.ui.common.PermissionHelper
+import com.infraspine.callsync.ui.recordings.RecordingFilter
+import com.infraspine.callsync.ui.recordings.RecordingsFragment
 
 class DashboardFragment : Fragment() {
 
@@ -25,16 +26,6 @@ class DashboardFragment : Fragment() {
 
     private val viewModel: DashboardViewModel by viewModels {
         DashboardViewModel.Factory(container)
-    }
-
-    private val openFolderLauncher = registerForActivityResult(
-        ActivityResultContracts.OpenDocumentTree()
-    ) { uri: Uri? ->
-        if (uri != null) {
-            container.folderManager.persistFolderSelection(uri)
-            refreshFolderLabel()
-            Snackbar.make(binding.root, getString(R.string.select_folder) + " ✓", Snackbar.LENGTH_SHORT).show()
-        }
     }
 
     private val callLogPermissionLauncher = registerForActivityResult(
@@ -58,10 +49,6 @@ class DashboardFragment : Fragment() {
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
 
-        binding.buttonSelectFolder.setOnClickListener {
-            openFolderLauncher.launch(container.folderManager.currentFolderUri())
-        }
-
         binding.buttonScanNow.setOnClickListener { startScan() }
 
         binding.buttonSyncNow.setOnClickListener { viewModel.syncNow() }
@@ -82,20 +69,34 @@ class DashboardFragment : Fragment() {
             startScan()
         }
 
+        setUpStatCardNavigation()
         observeViewModel()
-        refreshFolderLabel()
     }
 
-    override fun onResume() {
-        super.onResume()
-        refreshFolderLabel()
+    /** Tapping a summary card jumps to Recordings pre-filtered to that status. */
+    private fun setUpStatCardNavigation() {
+        val cardsToFilters = listOf(
+            binding.cardTotal to RecordingFilter.ALL,
+            binding.cardPending to RecordingFilter.PENDING,
+            binding.cardSynced to RecordingFilter.SYNCED,
+            binding.cardFailed to RecordingFilter.FAILED,
+            binding.cardUnmatched to RecordingFilter.UNMATCHED
+        )
+        cardsToFilters.forEach { (card, filter) ->
+            card.setOnClickListener {
+                findNavController().navigate(
+                    R.id.action_dashboard_to_recordings,
+                    RecordingsFragment.args(filter)
+                )
+            }
+        }
     }
 
     private fun startScan() {
         if (!container.folderManager.hasValidFolderSelection()) {
             Snackbar.make(binding.root, R.string.error_no_folder, Snackbar.LENGTH_LONG)
-                .setAction(R.string.select_folder) {
-                    openFolderLauncher.launch(null)
+                .setAction(R.string.settings) {
+                    findNavController().navigate(R.id.action_dashboard_to_settings)
                 }.show()
             binding.swipeRefresh.isRefreshing = false
             return
@@ -109,19 +110,19 @@ class DashboardFragment : Fragment() {
         viewModel.scanNow()
     }
 
-    private fun refreshFolderLabel() {
-        val label = viewModel.currentFolderLabel()
-        binding.textSelectedFolder.text = label ?: getString(R.string.no_folder_selected)
-        binding.buttonSelectFolder.text =
-            if (label != null) getString(R.string.change_folder) else getString(R.string.select_folder)
-    }
-
     private fun observeViewModel() {
         viewModel.counts.observe(viewLifecycleOwner) { counts ->
             binding.textTotalCount.text = counts.total.toString()
             binding.textPendingCount.text = counts.pending.toString()
             binding.textSyncedCount.text = counts.synced.toString()
             binding.textFailedCount.text = counts.failed.toString()
+            binding.textUnmatchedCount.text = counts.unmatched.toString()
+
+            binding.textSyncStatus.text = when {
+                counts.pending > 0 -> getString(R.string.sync_status_pending_count, counts.pending)
+                counts.total == 0 -> getString(R.string.sync_status_no_recordings)
+                else -> getString(R.string.sync_status_all_synced)
+            }
         }
 
         viewModel.isScanning.observe(viewLifecycleOwner) { scanning ->
