@@ -92,10 +92,14 @@ object NetworkDiagnostics {
      * "why did the server reject this with a 400" diagnosable from logcat alone.
      */
     fun logUploadRequest(
+        fileExists: Boolean,
+        actualFileSize: Long,
+        filePath: String,
         fileName: String,
         fileSize: Long,
         mimeType: String?,
         fileExtension: String,
+        multipartFieldNames: List<String>,
         phoneNumber: String?,
         callStartedAt: String?,
         durationSeconds: Long?,
@@ -105,15 +109,16 @@ object NetworkDiagnostics {
     ) {
         Log.d(
             TAG,
-            "Upload request: fileName=$fileName fileSize=$fileSize mimeType=$mimeType " +
-                "extension=$fileExtension phoneNumber=$phoneNumber callStartedAt=$callStartedAt " +
+            "Upload request: fileExists=$fileExists actualFileSize=$actualFileSize filePath=$filePath " +
+                "fileName=$fileName scannedFileSize=$fileSize mimeType=$mimeType extension=$fileExtension " +
+                "multipartFields=${multipartFieldNames.joinToString(",")} phoneNumber=$phoneNumber callStartedAt=$callStartedAt " +
                 "durationSeconds=$durationSeconds callType=$callType deviceId=$deviceId url=$uploadUrl"
         )
     }
 
     /** Logs the raw HTTP status and response body for a completed (non-exceptional) upload response. */
     fun logUploadResponse(httpCode: Int, rawBody: String?) {
-        Log.d(TAG, "Upload response: status=$httpCode body=${rawBody?.takeIf { it.isNotBlank() } ?: "<empty>"}")
+        Log.d(TAG, "Upload response: status=$httpCode serverErrorBody=${rawBody?.takeIf { it.isNotBlank() } ?: "<empty>"}")
     }
 
     /**

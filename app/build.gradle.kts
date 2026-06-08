@@ -4,6 +4,16 @@ plugins {
     id("com.google.devtools.ksp")
 }
 
+val releaseStoreFile = providers.environmentVariable("INFRA_SIGNING_STORE_FILE").orNull
+val releaseStorePassword = providers.environmentVariable("INFRA_SIGNING_STORE_PASSWORD").orNull
+val releaseKeyAlias = providers.environmentVariable("INFRA_SIGNING_KEY_ALIAS").orNull
+val releaseKeyPassword = providers.environmentVariable("INFRA_SIGNING_KEY_PASSWORD").orNull
+val releaseSigningConfigured =
+    !releaseStoreFile.isNullOrBlank() &&
+        !releaseStorePassword.isNullOrBlank() &&
+        !releaseKeyAlias.isNullOrBlank() &&
+        !releaseKeyPassword.isNullOrBlank()
+
 android {
     namespace = "com.infraspine.callsync"
     compileSdk = 34
@@ -12,8 +22,8 @@ android {
         applicationId = "com.infraspine.callsync"
         minSdk = 26
         targetSdk = 34
-        versionCode = 1
-        versionName = "1.0"
+        versionCode = 2
+        versionName = "1.0.1"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
@@ -28,13 +38,29 @@ android {
         buildConfigField("String", "GIT_COMMIT_SHA", "\"$gitCommitSha\"")
     }
 
+    signingConfigs {
+        create("internalRelease") {
+            if (releaseSigningConfigured) {
+                storeFile = file(releaseStoreFile!!)
+                storePassword = releaseStorePassword
+                keyAlias = releaseKeyAlias
+                keyPassword = releaseKeyPassword
+            }
+        }
+    }
+
     buildTypes {
         release {
             isMinifyEnabled = false
+            if (releaseSigningConfigured) {
+                signingConfig = signingConfigs.getByName("internalRelease")
+            }
+            buildConfigField("String", "UPDATE_APK_FILE_NAME", "\"app-release.apk\"")
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
         }
         debug {
             isMinifyEnabled = false
+            buildConfigField("String", "UPDATE_APK_FILE_NAME", "\"app-debug.apk\"")
         }
     }
 

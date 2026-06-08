@@ -11,7 +11,6 @@ import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import okhttp3.MultipartBody
 import okhttp3.RequestBody
-import okhttp3.RequestBody.Companion.asRequestBody
 import okhttp3.RequestBody.Companion.toRequestBody
 import java.io.File
 import java.io.IOException
@@ -46,18 +45,24 @@ class RealCrmUploader(
             } ?: return@withContext UploadOutcome.Failure("Recording file is no longer accessible")
 
             try {
-                val mediaType = resolveMediaType(recording).toMediaTypeOrNull()
+                val resolvedMediaType = resolveMediaType(recording)
+                val mediaType = resolvedMediaType.toMediaTypeOrNull()
+                val fileBody = RequestBody.create(tempFile, mediaType)
                 val filePart = MultipartBody.Part.createFormData(
                     "file",
                     recording.fileName,
-                    tempFile.asRequestBody(mediaType)
+                    fileBody
                 )
 
                 NetworkDiagnostics.logUploadRequest(
+                    fileExists = tempFile.exists(),
+                    actualFileSize = tempFile.length(),
+                    filePath = tempFile.absolutePath,
                     fileName = recording.fileName,
                     fileSize = recording.fileSize,
-                    mimeType = recording.mimeType,
+                    mimeType = resolvedMediaType,
                     fileExtension = recording.fileName.substringAfterLast('.', missingDelimiterValue = ""),
+                    multipartFieldNames = MULTIPART_FIELD_NAMES,
                     phoneNumber = recording.phoneNumber,
                     callStartedAt = recording.callStartedAt?.toIso8601(),
                     durationSeconds = recording.durationSeconds,
@@ -127,8 +132,10 @@ class RealCrmUploader(
      * multipart parsers reject.
      */
     private fun resolveMediaType(recording: RecordingEntity): String {
-        recording.mimeType?.takeIf { it.isNotBlank() && it != "audio/*" }?.let { return it }
         val ext = recording.fileName.substringAfterLast('.', missingDelimiterValue = "").lowercase()
+        if (ext == "aac") return "audio/aac"
+
+        recording.mimeType?.takeIf { it.isNotBlank() && it != "audio/*" }?.let { return it }
         return EXTENSION_MIME_TYPES[ext] ?: "application/octet-stream"
     }
 
@@ -146,6 +153,16 @@ class RealCrmUploader(
     private companion object {
         /** Must match the path in [CrmApiService.uploadCallRecording]'s `@POST` annotation. */
         const val UPLOAD_PATH = "api/crm/call-recordings/upload"
+
+        val MULTIPART_FIELD_NAMES = listOf(
+            "file",
+            "phoneNumber",
+            "callStartedAt",
+            "durationSeconds",
+            "callType",
+            "deviceId",
+            "originalFileName"
+        )
 
         /** ISO-8601 in UTC with always-3-digit millis, e.g. "2026-06-08T12:30:00.000Z". */
         val ISO_MILLIS_UTC: DateTimeFormatter =

@@ -27,10 +27,10 @@ Android Studio or any SDK locally.
 3. When it finishes (a few minutes), grab the APK either way:
    - **Stable link (recommended for re-installs/updates)** — always points at the
      newest build on `main`, same URL every time:
-     `https://github.com/<your-username>/<your-repo>/releases/download/latest/app-debug.apk`
+     `https://github.com/<your-username>/<your-repo>/releases/download/latest/app-release.apk`
    - **Or from this specific run** — open the run and scroll to **Artifacts**, then
-     download **InfraSpine-Call-Sync-debug-apk** (a zip containing `app-debug.apk`).
-4. Copy `app-debug.apk` to your Android phone and tap it to install (you'll need to
+     download **InfraSpine-Call-Sync-apk** (a zip containing `app-release.apk`).
+4. Copy `app-release.apk` to your Android phone and tap it to install (you'll need to
    allow "Install unknown apps" for whichever app you used to open it — Settings will
    prompt you the first time).
 
@@ -42,12 +42,20 @@ serves the newest build without you having to hunt through Actions runs.
 **Updating to a new build:** since this repo is private, the stable download link
 above only works for people with GitHub access (it returns 404 for anyone else —
 including from inside the app, so there's no in-app update checker). To update an
-agent's install, download `app-debug.apk` from the link yourself and send it to them
-— installing it over the old version upgrades in place and keeps their data.
+agent's install, download `app-release.apk` from the link yourself and send it to them.
+Installing it over the old version upgrades in place and keeps their data only when
+the installed APK has the same package name (`com.infraspine.callsync`) and the same
+internal release signing key.
 
-> This produces a **debug** build, which is fine for installing on agents' phones for
-> testing/internal use. A signed **release** build (for wider distribution / Play Store)
-> needs a signing key — ask if you'd like the workflow extended to produce one.
+> If a phone currently has a debug APK or any APK signed with a different key,
+> Android will reject the update with a same-package/signature conflict. Uninstall
+> that old app once, then install `app-release.apk`. Future internal release APKs
+> update normally as long as the same signing secrets are used.
+
+For main-branch internal releases, configure these GitHub Secrets once and keep
+them unchanged for future updates:
+`INFRA_SIGNING_KEYSTORE_BASE64`, `INFRA_SIGNING_STORE_PASSWORD`,
+`INFRA_SIGNING_KEY_ALIAS`, and `INFRA_SIGNING_KEY_PASSWORD`.
 
 ## 1. Requirements
 

@@ -20,7 +20,7 @@ jobs:
         uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: '17'
+          java-version: "17"
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
@@ -33,16 +33,45 @@ jobs:
       - name: Grant execute permission to gradlew
         run: chmod +x gradlew
 
-      - name: Build debug APK
+      - name: Decode internal release keystore
+        if: github.ref == 'refs/heads/main'
+        env:
+          INFRA_SIGNING_KEYSTORE_BASE64: ${{ secrets.INFRA_SIGNING_KEYSTORE_BASE64 }}
+          INFRA_SIGNING_STORE_PASSWORD: ${{ secrets.INFRA_SIGNING_STORE_PASSWORD }}
+          INFRA_SIGNING_KEY_ALIAS: ${{ secrets.INFRA_SIGNING_KEY_ALIAS }}
+          INFRA_SIGNING_KEY_PASSWORD: ${{ secrets.INFRA_SIGNING_KEY_PASSWORD }}
+        run: |
+          if [ -z "$INFRA_SIGNING_KEYSTORE_BASE64" ]; then
+            echo "Missing INFRA_SIGNING_KEYSTORE_BASE64 secret. Internal release updates require a stable signing key."
+            exit 1
+          fi
+          if [ -z "$INFRA_SIGNING_STORE_PASSWORD" ] || [ -z "$INFRA_SIGNING_KEY_ALIAS" ] || [ -z "$INFRA_SIGNING_KEY_PASSWORD" ]; then
+            echo "Missing one or more internal release signing secrets."
+            exit 1
+          fi
+          echo "$INFRA_SIGNING_KEYSTORE_BASE64" | base64 --decode > internal-release.keystore
+
+      - name: Build APK
         env:
           GIT_COMMIT_SHA: ${{ github.sha }}
-        run: ./gradlew assembleDebug --stacktrace
+          INFRA_SIGNING_STORE_FILE: ${{ github.workspace }}/internal-release.keystore
+          INFRA_SIGNING_STORE_PASSWORD: ${{ secrets.INFRA_SIGNING_STORE_PASSWORD }}
+          INFRA_SIGNING_KEY_ALIAS: ${{ secrets.INFRA_SIGNING_KEY_ALIAS }}
+          INFRA_SIGNING_KEY_PASSWORD: ${{ secrets.INFRA_SIGNING_KEY_PASSWORD }}
+        run: |
+          if [ "${{ github.ref }}" = "refs/heads/main" ]; then
+            ./gradlew assembleRelease --stacktrace
+          else
+            ./gradlew assembleDebug --stacktrace
+          fi
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: InfraSpine-Call-Sync-debug-apk
-          path: app/build/outputs/apk/debug/app-debug.apk
+          name: InfraSpine-Call-Sync-apk
+          path: |
+            app/build/outputs/apk/release/app-release.apk
+            app/build/outputs/apk/debug/app-debug.apk
           retention-days: 30
 
       - name: Publish/update "latest" release with the APK
@@ -53,10 +82,10 @@ jobs:
           name: Latest build (${{ github.sha }})
           body: |
             Automatically published from commit ${{ github.sha }} on ${{ github.ref_name }}.
-            This is a debug build for internal/agent installs — not a Play Store release.
+            This is an internally signed release build for agent installs.
 
-            Download `app-debug.apk` below and install it on your device
+            Download `app-release.apk` below and install it on your device
             (allow "Install unknown apps" when prompted).
           prerelease: true
           make_latest: true
-          files: app/build/outputs/apk/debug/app-debug.apk
+          files: app/build/outputs/apk/release/app-release.apk

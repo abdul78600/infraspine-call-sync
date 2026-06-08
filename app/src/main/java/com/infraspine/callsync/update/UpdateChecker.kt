@@ -55,11 +55,14 @@ class UpdateChecker(context: Context) {
 
                 val body = response.body?.string().orEmpty()
                 val json = JSONObject(body)
-                val apkAsset = findApkAsset(json)
-                    ?: return@withContext UpdateCheckResult.Error("Release has no APK asset")
+                val expectedApkName = BuildConfig.UPDATE_APK_FILE_NAME
+                val apkAsset = findApkAsset(json, expectedApkName)
+                    ?: return@withContext UpdateCheckResult.Error(
+                        "Release has no $expectedApkName asset for ${BuildConfig.BUILD_TYPE} builds"
+                    )
 
                 val downloadUrl = apkAsset.optString("browser_download_url").takeIf { it.isNotBlank() }
-                    ?: STABLE_APK_DOWNLOAD_URL
+                    ?: stableApkDownloadUrl(expectedApkName)
 
                 // The workflow names every release "Latest build (<full commit SHA>)" —
                 // extract that SHA and compare it to the one this APK was built from.
@@ -87,20 +90,24 @@ class UpdateChecker(context: Context) {
     private fun extractCommitSha(releaseName: String): String? =
         COMMIT_SHA_REGEX.find(releaseName)?.groupValues?.get(1)
 
-    private fun findApkAsset(release: JSONObject): JSONObject? {
+    private fun findApkAsset(release: JSONObject, expectedApkName: String): JSONObject? {
         val assets = release.optJSONArray("assets") ?: return null
         for (i in 0 until assets.length()) {
             val asset = assets.optJSONObject(i) ?: continue
-            if (asset.optString("name").endsWith(".apk", ignoreCase = true)) {
+            if (asset.optString("name").equals(expectedApkName, ignoreCase = true)) {
                 return asset
             }
         }
         return null
     }
 
+    private fun stableApkDownloadUrl(apkFileName: String): String =
+        "https://github.com/$GITHUB_OWNER/$GITHUB_REPO/releases/download/$RELEASE_TAG/$apkFileName"
+
     companion object {
         private const val GITHUB_OWNER = "abdul78600"
         private const val GITHUB_REPO = "infraspine-call-sync"
+        private const val RELEASE_TAG = "latest"
 
         // Matches the full 40-character SHA the workflow embeds in the release name,
         // e.g. "Latest build (875c973b4acead921a9e70d0f30d79246bcc69f5)".
@@ -109,14 +116,11 @@ class UpdateChecker(context: Context) {
         /**
          * Fetches by tag name rather than GitHub's "latest release" endpoint —
          * that endpoint deliberately excludes pre-releases/drafts, and the build
-         * workflow publishes the `latest` tag as a pre-release (it's a debug build,
-         * not a store-ready release), which made it 404 for everyone.
+         * workflow publishes the `latest` tag as a pre-release for the internal
+         * update channel, which made it 404 for everyone.
          */
         private const val LATEST_RELEASE_API_URL =
-            "https://api.github.com/repos/$GITHUB_OWNER/$GITHUB_REPO/releases/tags/latest"
+            "https://api.github.com/repos/$GITHUB_OWNER/$GITHUB_REPO/releases/tags/$RELEASE_TAG"
 
-        /** Stable URL that always resolves to the newest APK published under the `latest` release tag. */
-        const val STABLE_APK_DOWNLOAD_URL =
-            "https://github.com/$GITHUB_OWNER/$GITHUB_REPO/releases/download/latest/app-debug.apk"
     }
 }
