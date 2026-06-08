@@ -16,6 +16,16 @@ android {
         versionName = "1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+
+        // CI sets GIT_COMMIT_SHA to ${{ github.sha }} so the running build can be
+        // compared against the commit SHA embedded in the GitHub release name by
+        // UpdateChecker — falls back to a local git lookup for developer builds.
+        val gitCommitSha = (System.getenv("GIT_COMMIT_SHA") ?: providers.exec {
+            commandLine("git", "rev-parse", "HEAD")
+            isIgnoreExitValue = true
+        }.standardOutput.asText.get().trim()).ifBlank { "unknown" }
+
+        buildConfigField("String", "GIT_COMMIT_SHA", "\"$gitCommitSha\"")
     }
 
     buildTypes {
@@ -39,6 +49,7 @@ android {
 
     buildFeatures {
         viewBinding = true
+        buildConfig = true
     }
 }
 

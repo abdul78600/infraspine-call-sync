@@ -105,7 +105,6 @@ class SettingsFragment : Fragment() {
                     " — " + getString(R.string.update_available_message)
                 binding.buttonDownloadUpdate.visibility = View.VISIBLE
                 binding.buttonDownloadUpdate.setOnClickListener {
-                    viewModel.acknowledgeUpdate(result.publishedAt)
                     openDownloadPage(result.downloadUrl)
                 }
             }

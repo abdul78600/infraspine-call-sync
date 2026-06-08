@@ -1,7 +1,7 @@
 package com.infraspine.callsync.update
 
 import android.content.Context
-import androidx.core.content.edit
+import com.infraspine.callsync.BuildConfig
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
@@ -17,24 +17,24 @@ import java.util.concurrent.TimeUnit
  * published — and gives them a stable browser link to download it.
  */
 sealed class UpdateCheckResult {
-    data class UpToDate(val installedAt: String?) : UpdateCheckResult()
-    data class UpdateAvailable(val publishedAt: String, val downloadUrl: String) : UpdateCheckResult()
+    object UpToDate : UpdateCheckResult()
+    data class UpdateAvailable(val downloadUrl: String) : UpdateCheckResult()
     data class Error(val message: String) : UpdateCheckResult()
 }
 
 /**
- * Checks the "latest" GitHub Release for this project and compares its publish
- * timestamp against the one the agent last installed/acknowledged. The CI workflow
- * (.github/workflows/build-apk.yml) keeps a single release tagged `latest` up to
- * date with the newest debug APK at a stable download URL, so this never has to
- * guess at version numbers — it just compares "is there something newer than what
- * I last saw."
+ * Checks the "latest" GitHub Release for this project and compares the commit SHA
+ * it was built from against the SHA the *running* build was compiled from
+ * ([BuildConfig.GIT_COMMIT_SHA], injected by the CI workflow at build time).
+ *
+ * Earlier versions tried to infer "is there something newer" from cached release
+ * timestamps — but since the `latest` release is edited in place (same tag, new
+ * APK on every push), the only thing that reliably identifies *which* build is
+ * running versus which is published is the commit it was built from. Comparing
+ * SHAs directly removes the need to track any "last seen" state at all: a fresh
+ * install, a reinstall, or a brand new device all give the same correct answer.
  */
 class UpdateChecker(context: Context) {
-
-    private val appContext = context.applicationContext
-
-    private val prefs = appContext.getSharedPreferences(PREFS_FILE_NAME, Context.MODE_PRIVATE)
 
     private val client = OkHttpClient.Builder()
         .connectTimeout(15, TimeUnit.SECONDS)
@@ -58,29 +58,25 @@ class UpdateChecker(context: Context) {
                 val apkAsset = findApkAsset(json)
                     ?: return@withContext UpdateCheckResult.Error("Release has no APK asset")
 
-                // The `latest` release is edited in place on every build (same tag, new APK),
-                // and GitHub does NOT bump `released_at`/`published_at` on edits — only on the
-                // release's first publish. That made every check see an identical timestamp and
-                // report "up to date" forever, even right after a fresh build went out. The APK
-                // *asset's* `updated_at` does change on every re-upload, so that's what we diff.
-                val publishedAt = apkAsset.optString("updated_at").takeIf { it.isNotBlank() }
-                    ?: return@withContext UpdateCheckResult.Error("Release asset has no upload date")
-
                 val downloadUrl = apkAsset.optString("browser_download_url").takeIf { it.isNotBlank() }
                     ?: STABLE_APK_DOWNLOAD_URL
 
-                val lastSeen = prefs.getString(KEY_LAST_SEEN_PUBLISHED_AT, null)
+                // The workflow names every release "Latest build (<full commit SHA>)" —
+                // extract that SHA and compare it to the one this APK was built from.
+                val releaseSha = extractCommitSha(json.optString("name"))
+                val runningSha = BuildConfig.GIT_COMMIT_SHA
 
-                if (lastSeen == null) {
-                    // First check ever: remember this as the installed baseline rather
-                    // than immediately reporting "update available" for the build the
-                    // agent is already running.
-                    prefs.edit { putString(KEY_LAST_SEEN_PUBLISHED_AT, publishedAt) }
-                    UpdateCheckResult.UpToDate(installedAt = publishedAt)
-                } else if (publishedAt > lastSeen) {
-                    UpdateCheckResult.UpdateAvailable(publishedAt, downloadUrl)
-                } else {
-                    UpdateCheckResult.UpToDate(installedAt = lastSeen)
+                when {
+                    releaseSha == null ->
+                        UpdateCheckResult.Error("Could not determine the published build's commit")
+                    runningSha.isBlank() || runningSha == "unknown" ->
+                        // Can't identify our own build (e.g. a local build without CI env) —
+                        // surface the release as available rather than falsely claim "up to date".
+                        UpdateCheckResult.UpdateAvailable(downloadUrl)
+                    releaseSha == runningSha ->
+                        UpdateCheckResult.UpToDate
+                    else ->
+                        UpdateCheckResult.UpdateAvailable(downloadUrl)
                 }
             }
         }.getOrElse { error ->
@@ -88,10 +84,8 @@ class UpdateChecker(context: Context) {
         }
     }
 
-    /** Call after the agent downloads/installs an update so future checks compare against it. */
-    fun acknowledgeVersion(publishedAt: String) {
-        prefs.edit { putString(KEY_LAST_SEEN_PUBLISHED_AT, publishedAt) }
-    }
+    private fun extractCommitSha(releaseName: String): String? =
+        COMMIT_SHA_REGEX.find(releaseName)?.groupValues?.get(1)
 
     private fun findApkAsset(release: JSONObject): JSONObject? {
         val assets = release.optJSONArray("assets") ?: return null
@@ -105,11 +99,12 @@ class UpdateChecker(context: Context) {
     }
 
     companion object {
-        private const val PREFS_FILE_NAME = "update_checker_prefs"
-        private const val KEY_LAST_SEEN_PUBLISHED_AT = "last_seen_published_at"
-
         private const val GITHUB_OWNER = "abdul78600"
         private const val GITHUB_REPO = "infraspine-call-sync"
+
+        // Matches the full 40-character SHA the workflow embeds in the release name,
+        // e.g. "Latest build (875c973b4acead921a9e70d0f30d79246bcc69f5)".
+        private val COMMIT_SHA_REGEX = Regex("\\(([0-9a-f]{40})\\)")
 
         /**
          * Fetches by tag name rather than GitHub's "latest release" endpoint —

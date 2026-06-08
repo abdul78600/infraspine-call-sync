@@ -53,11 +53,6 @@ class SettingsViewModel(
         }
     }
 
-    /** Called once the agent taps through to download — stops re-prompting for this build. */
-    fun acknowledgeUpdate(publishedAt: String) {
-        updateChecker.acknowledgeVersion(publishedAt)
-    }
-
     private fun loadCurrentState(): SettingsUiState = SettingsUiState(
         crmServerUrl = settingsStore.crmServerUrl.orEmpty(),
         agentToken = settingsStore.agentToken.orEmpty(),
