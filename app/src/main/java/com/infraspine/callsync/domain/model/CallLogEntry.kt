@@ -5,10 +5,12 @@ package com.infraspine.callsync.domain.model
  * for a scanned recording.
  */
 data class CallLogEntry(
+    val id: Long? = null,
     val phoneNumber: String?,
     val startedAt: Long,
     val durationSeconds: Long,
-    val callType: CallType
+    val callType: CallType,
+    val cachedContactName: String? = null
 )
 
 /**

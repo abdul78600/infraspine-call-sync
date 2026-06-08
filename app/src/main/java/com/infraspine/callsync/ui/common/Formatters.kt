@@ -52,6 +52,8 @@ fun CallType.displayLabel(context: Context): String = when (this) {
     CallType.INCOMING -> context.getString(R.string.call_incoming)
     CallType.OUTGOING -> context.getString(R.string.call_outgoing)
     CallType.MISSED -> context.getString(R.string.call_missed)
+    CallType.REJECTED -> context.getString(R.string.call_rejected)
+    CallType.BLOCKED -> context.getString(R.string.call_blocked)
     CallType.UNKNOWN -> context.getString(R.string.call_unknown)
 }
 
@@ -59,6 +61,8 @@ fun CallType.colorRes(): Int = when (this) {
     CallType.INCOMING -> R.color.call_incoming
     CallType.OUTGOING -> R.color.call_outgoing
     CallType.MISSED -> R.color.call_missed
+    CallType.REJECTED -> R.color.call_unknown
+    CallType.BLOCKED -> R.color.call_unknown
     CallType.UNKNOWN -> R.color.call_unknown
 }
 

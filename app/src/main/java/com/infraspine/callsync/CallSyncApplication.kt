@@ -3,10 +3,15 @@ package com.infraspine.callsync
 import android.app.Application
 import com.infraspine.callsync.domain.util.NetworkDiagnostics
 import com.infraspine.callsync.sync.SyncScheduler
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 
 class CallSyncApplication : Application() {
 
     val container: AppContainer by lazy { AppContainer(applicationContext) }
+    private val applicationScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
     override fun onCreate() {
         super.onCreate()
@@ -20,5 +25,9 @@ class CallSyncApplication : Application() {
             autoSyncEnabled = container.settingsStore.autoSyncEnabled,
             wifiOnly = container.settingsStore.syncOnWifiOnly
         )
+
+        applicationScope.launch {
+            container.syncRepository.syncCallLogsOnly()
+        }
     }
 }

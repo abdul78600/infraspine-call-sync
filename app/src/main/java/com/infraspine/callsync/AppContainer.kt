@@ -12,6 +12,7 @@ import com.infraspine.callsync.data.repository.RecordingRepository
 import com.infraspine.callsync.data.repository.SyncRepository
 import com.infraspine.callsync.domain.util.NetworkMonitor
 import com.infraspine.callsync.scan.CallLogMatcher
+import com.infraspine.callsync.scan.MobileCallLogReader
 import com.infraspine.callsync.scan.RecordingFolderManager
 import com.infraspine.callsync.scan.RecordingScanner
 import com.infraspine.callsync.update.UpdateChecker
@@ -33,6 +34,8 @@ class AppContainer(private val context: Context) {
 
     private val callLogMatcher: CallLogMatcher by lazy { CallLogMatcher(context) }
 
+    private val mobileCallLogReader: MobileCallLogReader by lazy { MobileCallLogReader(context) }
+
     private val networkMonitor: NetworkMonitor by lazy { NetworkMonitor(context) }
 
     private val apiFactory: CrmApiFactory by lazy { CrmApiFactory(settingsStore) }
@@ -53,7 +56,9 @@ class AppContainer(private val context: Context) {
             dao = database.recordingDao(),
             settingsStore = settingsStore,
             networkMonitor = networkMonitor,
-            apiFactory = apiFactory
+            apiFactory = apiFactory,
+            callLogReader = mobileCallLogReader,
+            hasCallLogPermission = { hasCallLogPermission() }
         )
     }
 

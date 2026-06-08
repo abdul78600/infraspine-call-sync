@@ -3,6 +3,7 @@ package com.infraspine.callsync.data.remote
 import okhttp3.MultipartBody
 import okhttp3.RequestBody
 import retrofit2.Response
+import retrofit2.http.Body
 import retrofit2.http.Multipart
 import retrofit2.http.POST
 import retrofit2.http.Part
@@ -32,6 +33,11 @@ interface CrmApiService {
         @Part("deviceId") deviceId: RequestBody,
         @Part("originalFileName") originalFileName: RequestBody
     ): Response<UploadResponse>
+
+    @POST("api/crm/call-logs/sync")
+    suspend fun syncCallLogs(
+        @Body request: CallLogsSyncRequest
+    ): Response<CallLogsSyncResponse>
 }
 
 /**
@@ -41,5 +47,25 @@ interface CrmApiService {
 data class UploadResponse(
     val success: Boolean? = null,
     val recordingId: String? = null,
+    val message: String? = null
+)
+
+data class CallLogsSyncRequest(
+    val logs: List<CallLogSyncItem>
+)
+
+data class CallLogSyncItem(
+    val externalCallId: String,
+    val phoneNumber: String?,
+    val callStartedAt: String,
+    val durationSeconds: Long,
+    val callType: String,
+    val deviceId: String
+)
+
+data class CallLogsSyncResponse(
+    val success: Boolean? = null,
+    val uploaded: Int? = null,
+    val skipped: Int? = null,
     val message: String? = null
 )

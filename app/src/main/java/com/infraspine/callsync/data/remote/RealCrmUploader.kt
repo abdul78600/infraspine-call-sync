@@ -66,7 +66,7 @@ class RealCrmUploader(
                     phoneNumber = recording.phoneNumber,
                     callStartedAt = recording.callStartedAt?.toIso8601(),
                     durationSeconds = recording.durationSeconds,
-                    callType = recording.callType.name.lowercase(),
+                    callType = recording.callType.apiValue(),
                     deviceId = deviceId,
                     uploadUrl = resolvedUploadUrl()
                 )
@@ -76,7 +76,7 @@ class RealCrmUploader(
                     phoneNumber = recording.phoneNumber?.toPlainTextBody(),
                     callStartedAt = recording.callStartedAt?.toIso8601()?.toPlainTextBody(),
                     durationSeconds = recording.durationSeconds?.toString()?.toPlainTextBody(),
-                    callType = recording.callType.name.lowercase().toPlainTextBody(),
+                    callType = recording.callType.apiValue().toPlainTextBody(),
                     deviceId = deviceId.toPlainTextBody(),
                     originalFileName = recording.fileName.toPlainTextBody()
                 )

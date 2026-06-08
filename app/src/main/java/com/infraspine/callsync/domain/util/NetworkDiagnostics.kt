@@ -121,6 +121,24 @@ object NetworkDiagnostics {
         Log.d(TAG, "Upload response: status=$httpCode serverErrorBody=${rawBody?.takeIf { it.isNotBlank() } ?: "<empty>"}")
     }
 
+    fun logCallLogSync(
+        totalFetched: Int,
+        uploaded: Int,
+        skipped: Int,
+        failed: Int,
+        lastSyncedCallLogId: Long
+    ) {
+        Log.d(
+            TAG,
+            "Call log sync: totalFetched=$totalFetched uploaded=$uploaded skipped=$skipped " +
+                "failed=$failed lastSyncedCallLogId=$lastSyncedCallLogId"
+        )
+    }
+
+    fun logCallLogSyncResponse(httpCode: Int, rawBody: String?) {
+        Log.d(TAG, "Call log sync response: status=$httpCode serverErrorBody=${rawBody?.takeIf { it.isNotBlank() } ?: "<empty>"}")
+    }
+
     /**
      * Android (via [android.security.NetworkSecurityPolicy]) refuses to even open a
      * plaintext socket to a host that cleartext isn't permitted for, surfacing it as

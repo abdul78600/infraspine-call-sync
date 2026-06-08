@@ -37,6 +37,15 @@ class DashboardFragment : Fragment() {
         viewModel.scanNow()
     }
 
+    private val syncCallLogPermissionLauncher = registerForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        if (!granted) {
+            Snackbar.make(binding.root, R.string.error_call_log_permission, Snackbar.LENGTH_LONG).show()
+        }
+        viewModel.syncNow()
+    }
+
     override fun onCreateView(
         inflater: LayoutInflater,
         container: ViewGroup?,
@@ -51,7 +60,7 @@ class DashboardFragment : Fragment() {
 
         binding.buttonScanNow.setOnClickListener { startScan() }
 
-        binding.buttonSyncNow.setOnClickListener { viewModel.syncNow() }
+        binding.buttonSyncNow.setOnClickListener { startSync() }
 
         binding.buttonViewRecordings.setOnClickListener {
             findNavController().navigate(R.id.action_dashboard_to_recordings)
@@ -110,6 +119,15 @@ class DashboardFragment : Fragment() {
         viewModel.scanNow()
     }
 
+    private fun startSync() {
+        if (!PermissionHelper.hasCallLogPermission(requireContext())) {
+            syncCallLogPermissionLauncher.launch(Manifest.permission.READ_CALL_LOG)
+            return
+        }
+
+        viewModel.syncNow()
+    }
+
     private fun observeViewModel() {
         viewModel.counts.observe(viewLifecycleOwner) { counts ->
             binding.textTotalCount.text = counts.total.toString()
@@ -150,7 +168,14 @@ class DashboardFragment : Fragment() {
             DashboardMessage.ScanCallLogPermissionDenied -> getString(R.string.error_call_log_permission)
             is DashboardMessage.ScanError -> message.message
 
-            is DashboardMessage.SyncFinished -> getString(R.string.sync_complete, message.uploaded, message.failed)
+            is DashboardMessage.SyncFinished -> getString(
+                R.string.sync_complete,
+                message.uploaded,
+                message.failed,
+                message.callLogsUploaded,
+                message.callLogsSkipped,
+                message.callLogsFailed
+            )
             DashboardMessage.SyncNothingPending -> getString(R.string.status_pending) + ": 0"
             DashboardMessage.SyncNetworkUnavailable -> getString(R.string.error_network_unavailable)
             DashboardMessage.SyncWifiRequired -> getString(R.string.error_wifi_required)

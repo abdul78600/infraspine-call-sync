@@ -31,7 +31,13 @@ sealed class DashboardMessage {
     object ScanCallLogPermissionDenied : DashboardMessage()
     data class ScanError(val message: String) : DashboardMessage()
 
-    data class SyncFinished(val uploaded: Int, val failed: Int) : DashboardMessage()
+    data class SyncFinished(
+        val uploaded: Int,
+        val failed: Int,
+        val callLogsUploaded: Int,
+        val callLogsSkipped: Int,
+        val callLogsFailed: Int
+    ) : DashboardMessage()
     object SyncNothingPending : DashboardMessage()
     object SyncNetworkUnavailable : DashboardMessage()
     object SyncWifiRequired : DashboardMessage()
@@ -98,7 +104,13 @@ class DashboardViewModel(
 
             _message.value = Event(
                 when (result) {
-                    is SyncResult.Completed -> DashboardMessage.SyncFinished(result.uploaded, result.failed)
+                    is SyncResult.Completed -> DashboardMessage.SyncFinished(
+                        uploaded = result.uploaded,
+                        failed = result.failed,
+                        callLogsUploaded = result.callLogsUploaded,
+                        callLogsSkipped = result.callLogsSkipped,
+                        callLogsFailed = result.callLogsFailed
+                    )
                     SyncResult.NothingToSync -> DashboardMessage.SyncNothingPending
                     SyncResult.NetworkUnavailable -> DashboardMessage.SyncNetworkUnavailable
                     SyncResult.WifiRequired -> DashboardMessage.SyncWifiRequired

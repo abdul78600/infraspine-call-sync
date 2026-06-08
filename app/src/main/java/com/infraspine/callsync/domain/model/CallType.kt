@@ -7,13 +7,19 @@ enum class CallType {
     INCOMING,
     OUTGOING,
     MISSED,
+    REJECTED,
+    BLOCKED,
     UNKNOWN;
+
+    fun apiValue(): String = name.lowercase()
 
     companion object {
         fun fromCallLogType(type: Int): CallType = when (type) {
             android.provider.CallLog.Calls.INCOMING_TYPE -> INCOMING
             android.provider.CallLog.Calls.OUTGOING_TYPE -> OUTGOING
             android.provider.CallLog.Calls.MISSED_TYPE -> MISSED
+            android.provider.CallLog.Calls.REJECTED_TYPE -> REJECTED
+            android.provider.CallLog.Calls.BLOCKED_TYPE -> BLOCKED
             else -> UNKNOWN
         }
 

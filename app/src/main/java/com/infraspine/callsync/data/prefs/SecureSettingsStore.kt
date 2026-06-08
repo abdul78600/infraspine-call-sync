@@ -58,6 +58,10 @@ class SecureSettingsStore(context: Context) {
         get() = prefs.getBoolean(KEY_DUMMY_MODE, true)
         set(value) = prefs.edit { putBoolean(KEY_DUMMY_MODE, value) }
 
+    var lastSyncedCallLogId: Long
+        get() = prefs.getLong(KEY_LAST_SYNCED_CALL_LOG_ID, 0L)
+        set(value) = prefs.edit { putLong(KEY_LAST_SYNCED_CALL_LOG_ID, value) }
+
     fun isCrmConfigured(): Boolean =
         !crmServerUrl.isNullOrBlank() && !agentToken.isNullOrBlank()
 
@@ -71,5 +75,6 @@ class SecureSettingsStore(context: Context) {
         private const val KEY_WIFI_ONLY = "sync_wifi_only"
         private const val KEY_AUTO_SYNC = "auto_sync_enabled"
         private const val KEY_DUMMY_MODE = "dummy_test_mode"
+        private const val KEY_LAST_SYNCED_CALL_LOG_ID = "last_synced_call_log_id"
     }
 }
