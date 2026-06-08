@@ -55,10 +55,19 @@ class UpdateChecker(context: Context) {
 
                 val body = response.body?.string().orEmpty()
                 val json = JSONObject(body)
-                val publishedAt = json.optString("published_at").takeIf { it.isNotBlank() }
-                    ?: return@withContext UpdateCheckResult.Error("Release has no publish date")
+                val apkAsset = findApkAsset(json)
+                    ?: return@withContext UpdateCheckResult.Error("Release has no APK asset")
 
-                val downloadUrl = findApkDownloadUrl(json) ?: STABLE_APK_DOWNLOAD_URL
+                // The `latest` release is edited in place on every build (same tag, new APK),
+                // and GitHub does NOT bump `released_at`/`published_at` on edits — only on the
+                // release's first publish. That made every check see an identical timestamp and
+                // report "up to date" forever, even right after a fresh build went out. The APK
+                // *asset's* `updated_at` does change on every re-upload, so that's what we diff.
+                val publishedAt = apkAsset.optString("updated_at").takeIf { it.isNotBlank() }
+                    ?: return@withContext UpdateCheckResult.Error("Release asset has no upload date")
+
+                val downloadUrl = apkAsset.optString("browser_download_url").takeIf { it.isNotBlank() }
+                    ?: STABLE_APK_DOWNLOAD_URL
 
                 val lastSeen = prefs.getString(KEY_LAST_SEEN_PUBLISHED_AT, null)
 
@@ -84,13 +93,12 @@ class UpdateChecker(context: Context) {
         prefs.edit { putString(KEY_LAST_SEEN_PUBLISHED_AT, publishedAt) }
     }
 
-    private fun findApkDownloadUrl(release: JSONObject): String? {
+    private fun findApkAsset(release: JSONObject): JSONObject? {
         val assets = release.optJSONArray("assets") ?: return null
         for (i in 0 until assets.length()) {
             val asset = assets.optJSONObject(i) ?: continue
-            val name = asset.optString("name")
-            if (name.endsWith(".apk", ignoreCase = true)) {
-                return asset.optString("browser_download_url").takeIf { it.isNotBlank() }
+            if (asset.optString("name").endsWith(".apk", ignoreCase = true)) {
+                return asset
             }
         }
         return null
