@@ -123,7 +123,7 @@ class RealCrmUploader(
      * Resolves a concrete `Content-Type` for the file part. Prefers the stored
      * [RecordingEntity.mimeType], then maps the file extension to a concrete audio
      * type (so `.aac` -> `audio/aac`), and finally falls back to
-     * `application/octet-stream` — never a wildcard like `audio/*`, which some
+     * `application/octet-stream` — never a wildcard audio type, which some
      * multipart parsers reject.
      */
     private fun resolveMediaType(recording: RecordingEntity): String {
