@@ -47,7 +47,7 @@ class RealCrmUploader(
             try {
                 val resolvedMediaType = resolveMediaType(recording)
                 val mediaType = resolvedMediaType.toMediaTypeOrNull()
-                val fileBody = RequestBody.create(tempFile, mediaType)
+                val fileBody = RequestBody.create(mediaType, tempFile)
                 val filePart = MultipartBody.Part.createFormData(
                     "file",
                     recording.fileName,
