@@ -47,6 +47,7 @@ object UploadErrorParser {
                 is JSONArray -> fromJsonArray(errors)?.let { return it }
                 is JSONObject -> fromFieldErrorMap(errors)?.let { return it }
                 is String -> errors.trim().takeIf { it.isNotEmpty() }?.let { return it }
+                else -> Unit
             }
         }
 
