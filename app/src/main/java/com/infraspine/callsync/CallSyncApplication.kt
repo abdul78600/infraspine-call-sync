@@ -22,12 +22,14 @@ class CallSyncApplication : Application() {
         // app update doesn't silently drop a previously enabled background sync.
         SyncScheduler.apply(
             context = this,
-            autoSyncEnabled = container.settingsStore.autoSyncEnabled,
+            autoSyncEnabled = container.settingsStore.autoSyncEnabled && container.settingsStore.hasValidSession(),
             wifiOnly = container.settingsStore.syncOnWifiOnly
         )
 
-        applicationScope.launch {
-            container.syncRepository.syncCallLogsOnly()
+        if (container.settingsStore.hasValidSession()) {
+            applicationScope.launch {
+                container.syncRepository.syncCallLogsOnly()
+            }
         }
     }
 }

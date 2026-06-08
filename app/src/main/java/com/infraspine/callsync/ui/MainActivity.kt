@@ -8,6 +8,8 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.navigation.fragment.NavHostFragment
 import androidx.navigation.ui.AppBarConfiguration
 import androidx.navigation.ui.setupWithNavController
+import com.infraspine.callsync.CallSyncApplication
+import com.infraspine.callsync.R
 import com.infraspine.callsync.databinding.ActivityMainBinding
 import com.infraspine.callsync.ui.common.PermissionHelper
 
@@ -29,8 +31,19 @@ class MainActivity : AppCompatActivity() {
         val navHostFragment = supportFragmentManager
             .findFragmentById(binding.navHostFragment.id) as NavHostFragment
         val navController = navHostFragment.navController
+        val app = application as CallSyncApplication
+        val graph = navController.navInflater.inflate(R.navigation.nav_graph).apply {
+            setStartDestination(
+                if (app.container.settingsStore.hasValidSession()) {
+                    R.id.dashboardFragment
+                } else {
+                    R.id.loginFragment
+                }
+            )
+        }
+        navController.graph = graph
 
-        val appBarConfiguration = AppBarConfiguration(navController.graph)
+        val appBarConfiguration = AppBarConfiguration(setOf(R.id.dashboardFragment, R.id.loginFragment))
         binding.toolbar.setupWithNavController(navController, appBarConfiguration)
 
         requestNotificationPermissionIfNeeded()

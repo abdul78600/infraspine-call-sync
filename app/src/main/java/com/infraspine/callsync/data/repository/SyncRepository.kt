@@ -19,6 +19,7 @@ import com.infraspine.callsync.domain.util.NetworkMonitor
 import com.infraspine.callsync.domain.util.UploadErrorParser
 import com.infraspine.callsync.scan.MobileCallLog
 import com.infraspine.callsync.scan.MobileCallLogReader
+import com.infraspine.callsync.sync.SyncScheduler
 import java.io.IOException
 import java.time.Instant
 import java.time.ZoneOffset
@@ -37,6 +38,7 @@ sealed class SyncResult {
     object NetworkUnavailable : SyncResult()
     object WifiRequired : SyncResult()
     object ApiNotConfigured : SyncResult()
+    object AuthRequired : SyncResult()
 }
 
 /**
@@ -66,8 +68,11 @@ class SyncRepository(
     }
 
     suspend fun syncPending(): SyncResult {
-        if (!settingsStore.isCrmConfigured() && !settingsStore.dummyTestMode) {
+        if (settingsStore.crmServerUrl.isNullOrBlank()) {
             return SyncResult.ApiNotConfigured
+        }
+        if (!settingsStore.hasValidSession()) {
+            return SyncResult.AuthRequired
         }
 
         if (!networkMonitor.isConnected()) {
@@ -114,10 +119,17 @@ class SyncRepository(
                     )
                     failedCount++
                 }
+                UploadOutcome.Unauthorized -> {
+                    clearExpiredSession()
+                    return SyncResult.AuthRequired
+                }
             }
         }
 
         val callLogResult = syncCallLogs(deviceId)
+        if (callLogResult.authRequired) {
+            return SyncResult.AuthRequired
+        }
         val didWork = uploaded > 0 ||
             failedCount > 0 ||
             callLogResult.uploaded > 0 ||
@@ -206,6 +218,17 @@ class SyncRepository(
                     NetworkDiagnostics.classify(httpCode = response.code(), serverMessage = serverMessage)
                 )
 
+                if (response.code() == 401) {
+                    clearExpiredSession()
+                    NetworkDiagnostics.logCallLogSync(fetched.size, 0, skipped, uploadable.size, lastSyncedId)
+                    return CallLogSyncStats(
+                        skipped = skipped,
+                        failed = uploadable.size,
+                        authRequired = true,
+                        errorMessage = serverMessage
+                    )
+                }
+
                 if (response.code() == 400) {
                     return syncCallLogsIndividually(
                         api = api,
@@ -258,6 +281,23 @@ class SyncRepository(
                 val rawBody = runCatching { response.errorBody()?.string() }.getOrNull()
                 NetworkDiagnostics.logCallLogSyncResponse(response.code(), rawBody)
                 val serverMessage = UploadErrorParser.extractMessage(rawBody)
+                if (response.code() == 401) {
+                    clearExpiredSession()
+                    NetworkDiagnostics.logCallLogSync(
+                        totalFetched = totalFetched,
+                        uploaded = uploaded,
+                        skipped = alreadySkipped,
+                        failed = failed + (payload.size - uploaded - failed),
+                        lastSyncedCallLogId = previousCursor
+                    )
+                    return CallLogSyncStats(
+                        uploaded = uploaded,
+                        skipped = alreadySkipped,
+                        failed = payload.size - uploaded,
+                        authRequired = true,
+                        errorMessage = serverMessage
+                    )
+                }
                 if (firstError == null) firstError = serverMessage ?: "Server rejected call log ${item.externalCallId}"
             }
         }
@@ -304,6 +344,16 @@ class SyncRepository(
     private fun Long.toIso8601(): String =
         ISO_MILLIS_UTC.format(Instant.ofEpochMilli(this))
 
+    private fun clearExpiredSession() {
+        settingsStore.clearAuth()
+        settingsStore.autoSyncEnabled = false
+        SyncScheduler.apply(
+            context = context.applicationContext,
+            autoSyncEnabled = false,
+            wifiOnly = settingsStore.syncOnWifiOnly
+        )
+    }
+
     companion object {
         val ISO_MILLIS_UTC: DateTimeFormatter =
             DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'").withZone(ZoneOffset.UTC)
@@ -325,5 +375,6 @@ data class CallLogSyncStats(
     val uploaded: Int = 0,
     val skipped: Int = 0,
     val failed: Int = 0,
+    val authRequired: Boolean = false,
     val errorMessage: String? = null
 )

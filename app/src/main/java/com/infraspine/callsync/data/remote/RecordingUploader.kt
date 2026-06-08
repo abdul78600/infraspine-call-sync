@@ -8,6 +8,7 @@ import com.infraspine.callsync.data.local.entity.RecordingEntity
 sealed class UploadOutcome {
     data class Success(val serverRecordingId: String?) : UploadOutcome()
     data class Failure(val message: String) : UploadOutcome()
+    object Unauthorized : UploadOutcome()
 }
 
 /**

@@ -25,7 +25,7 @@ import java.time.format.DateTimeFormatter
  *
  * This class is wired up and ready — it activates automatically once
  * [com.infraspine.callsync.data.prefs.SecureSettingsStore.dummyTestMode] is turned off
- * and a CRM URL + agent token are configured in Settings.
+ * and a CRM URL + authenticated session are configured.
  */
 class RealCrmUploader(
     private val context: Context,
@@ -88,7 +88,14 @@ class RealCrmUploader(
                     val rawBody = runCatching { response.errorBody()?.string() }.getOrNull()
                     NetworkDiagnostics.logUploadResponse(response.code(), rawBody)
                     val serverMessage = UploadErrorParser.extractMessage(rawBody)
-                    UploadOutcome.Failure(NetworkDiagnostics.classify(httpCode = response.code(), serverMessage = serverMessage))
+                    if (response.code() == 401) {
+                        settingsStore.clearAuth()
+                        UploadOutcome.Unauthorized
+                    } else {
+                        UploadOutcome.Failure(
+                            NetworkDiagnostics.classify(httpCode = response.code(), serverMessage = serverMessage)
+                        )
+                    }
                 }
             } catch (io: IOException) {
                 val message = NetworkDiagnostics.classify(throwable = io)

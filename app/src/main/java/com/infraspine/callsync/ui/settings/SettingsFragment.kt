@@ -9,6 +9,8 @@ import android.view.ViewGroup
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.viewModels
+import androidx.navigation.NavOptions
+import androidx.navigation.fragment.findNavController
 import com.google.android.material.snackbar.Snackbar
 import com.infraspine.callsync.CallSyncApplication
 import com.infraspine.callsync.R
@@ -52,6 +54,7 @@ class SettingsFragment : Fragment() {
         }
 
         binding.buttonSaveSettings.setOnClickListener { saveSettings() }
+        binding.buttonLogout.setOnClickListener { viewModel.logout() }
 
         binding.buttonCheckForUpdates.setOnClickListener {
             binding.buttonDownloadUpdate.visibility = View.GONE
@@ -63,9 +66,10 @@ class SettingsFragment : Fragment() {
             if (binding.editCrmUrl.text?.toString() != state.crmServerUrl) {
                 binding.editCrmUrl.setText(state.crmServerUrl)
             }
-            if (binding.editAgentToken.text?.toString() != state.agentToken) {
-                binding.editAgentToken.setText(state.agentToken)
-            }
+            binding.textLoggedInUser.text = getString(
+                R.string.logged_in_as,
+                state.loggedInUser.ifBlank { getString(R.string.login_unknown_user) }
+            )
             binding.textDeviceId.text = getString(R.string.device_id) + ": ${state.deviceId}"
             binding.switchWifiOnly.isChecked = state.syncOnWifiOnly
             binding.switchAutoSync.isChecked = state.autoSyncEnabled
@@ -75,6 +79,18 @@ class SettingsFragment : Fragment() {
         viewModel.saved.observe(viewLifecycleOwner) { saved ->
             if (saved == true) {
                 Snackbar.make(binding.root, R.string.settings_saved, Snackbar.LENGTH_SHORT).show()
+            }
+        }
+
+        viewModel.loggedOut.observe(viewLifecycleOwner) { event ->
+            event.getContentIfNotHandled()?.let {
+                findNavController().navigate(
+                    R.id.loginFragment,
+                    null,
+                    NavOptions.Builder()
+                        .setPopUpTo(R.id.nav_graph, true)
+                        .build()
+                )
             }
         }
 
@@ -132,7 +148,6 @@ class SettingsFragment : Fragment() {
     private fun saveSettings() {
         viewModel.save(
             crmServerUrl = binding.editCrmUrl.text?.toString().orEmpty(),
-            agentToken = binding.editAgentToken.text?.toString().orEmpty(),
             syncOnWifiOnly = binding.switchWifiOnly.isChecked,
             autoSyncEnabled = binding.switchAutoSync.isChecked,
             dummyTestMode = binding.switchDummyMode.isChecked

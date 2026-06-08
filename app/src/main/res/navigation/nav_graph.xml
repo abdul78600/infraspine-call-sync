@@ -6,6 +6,12 @@
     app:startDestination="@id/dashboardFragment">
 
     <fragment
+        android:id="@+id/loginFragment"
+        android:name="com.infraspine.callsync.ui.login.LoginFragment"
+        android:label="@string/login_title"
+        tools:layout="@layout/fragment_login" />
+
+    <fragment
         android:id="@+id/dashboardFragment"
         android:name="com.infraspine.callsync.ui.dashboard.DashboardFragment"
         android:label="@string/dashboard_title"

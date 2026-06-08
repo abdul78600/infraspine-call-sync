@@ -11,7 +11,7 @@ import java.util.concurrent.TimeUnit
 
 /**
  * Builds (and rebuilds, if the configured URL changes) the Retrofit client used to
- * talk to the CRM. The agent token is attached via [AuthInterceptor] and is never
+ * talk to the CRM. The access token is attached via [AuthInterceptor] and is never
  * written to logs — intentionally no logging interceptor is wired in, anywhere,
  * so the Authorization header can never end up in logcat or crash reports.
  */
@@ -57,14 +57,14 @@ class CrmApiFactory(private val settingsStore: SecureSettingsStore) {
 }
 
 /**
- * Attaches the agent token as a Bearer Authorization header on every request.
+ * Attaches the access token as a Bearer Authorization header on every request.
  * The token is read fresh per-request (so settings changes apply immediately)
  * and is never logged or included in exception messages.
  */
 private class AuthInterceptor(private val settingsStore: SecureSettingsStore) : Interceptor {
     override fun intercept(chain: Interceptor.Chain): Response {
         val original = chain.request()
-        val token = settingsStore.agentToken
+        val token = settingsStore.accessToken
 
         val request = if (!token.isNullOrBlank()) {
             original.newBuilder()

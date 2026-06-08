@@ -11,8 +11,8 @@ import javax.net.ssl.SSLException
 private const val TAG = "CrmConnection"
 
 /**
- * Logs the CRM connection setup at process start (URL + scheme only — never the
- * agent token) and turns low-level network exceptions into the user-facing
+ * Logs the CRM connection setup at process start (URL + scheme only, never the
+ * access token) and turns low-level network exceptions into the user-facing
  * categories from the upload error UI. Centralized here so [com.infraspine.callsync
  * .data.remote.RealCrmUploader] and any future callers classify failures identically.
  */
@@ -54,7 +54,7 @@ object NetworkDiagnostics {
         if (httpCode != null) {
             val message = serverMessage?.takeIf { it.isNotBlank() }
             return when (httpCode) {
-                401 -> message ?: "Unauthorized — check the agent token in Settings"
+                401 -> message ?: "Unauthorized — please log in to CRM again"
                 403 -> message ?: "Forbidden — this device is not allowed to upload"
                 400 -> message ?: "Server rejected the upload (400) — no validation details returned"
                 else -> if (message != null) "Server responded with $httpCode: $message" else "Server responded with $httpCode"
@@ -88,7 +88,7 @@ object NetworkDiagnostics {
 
     /**
      * Logs every field that goes into the multipart upload request, plus the final
-     * resolved URL — but never the Authorization header/agent token. Intended to make
+     * resolved URL, but never the Authorization header/access token. Intended to make
      * "why did the server reject this with a 400" diagnosable from logcat alone.
      */
     fun logUploadRequest(

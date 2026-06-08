@@ -23,6 +23,17 @@
     <string name="view_recordings">View Recordings</string>
     <string name="view_call_history">View Call History</string>
 
+    <!-- Login -->
+    <string name="login_title">CRM Login</string>
+    <string name="login_subtitle">Sign in with your CRM agent account</string>
+    <string name="login_email">Email</string>
+    <string name="login_password">Password</string>
+    <string name="login_button">Login</string>
+    <string name="login_in_progress">Logging in...</string>
+    <string name="login_unknown_user">authenticated CRM user</string>
+    <string name="logged_in_as">Logged in as: %1$s</string>
+    <string name="logout">Logout</string>
+
     <!-- Recording list -->
     <string name="recordings_title">Recordings</string>
     <string name="filter_all">All</string>
@@ -56,8 +67,6 @@
     <string name="settings_title">Settings</string>
     <string name="crm_server_url">CRM Server URL</string>
     <string name="crm_server_url_hint">https://your-crm.example.com</string>
-    <string name="agent_token">Agent Login / Token</string>
-    <string name="agent_token_hint">Enter agent token</string>
     <string name="device_id">Device ID</string>
     <string name="sync_wifi_only">Sync only on Wi-Fi</string>
     <string name="auto_sync">Auto sync</string>
@@ -85,6 +94,7 @@
     <string name="error_upload_failed">Upload failed</string>
     <string name="error_network_unavailable">Network unavailable. Will retry later.</string>
     <string name="error_api_url_missing">CRM server URL is not configured. Recordings remain pending.</string>
+    <string name="error_auth_required">Please log in to CRM again before syncing.</string>
     <string name="error_wifi_required">Sync is restricted to Wi-Fi. Connect to Wi-Fi and try again.</string>
     <string name="permission_required_title">Permission required</string>
     <string name="permission_call_log_rationale">InfraSpine Recordings needs Call Log access to match recordings with phone calls (number, time, duration, type).</string>

@@ -27,7 +27,8 @@ class AutoSyncWorker(
             SyncResult.NetworkUnavailable,
             SyncResult.WifiRequired -> Result.retry()
 
-            SyncResult.ApiNotConfigured -> Result.success() // nothing actionable until configured
+            SyncResult.ApiNotConfigured,
+            SyncResult.AuthRequired -> Result.success() // nothing actionable until configured/logged in
         }
     }
 

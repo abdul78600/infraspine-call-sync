@@ -43,6 +43,7 @@ sealed class DashboardMessage {
     object SyncNetworkUnavailable : DashboardMessage()
     object SyncWifiRequired : DashboardMessage()
     object SyncApiNotConfigured : DashboardMessage()
+    object SyncAuthRequired : DashboardMessage()
 }
 
 class DashboardViewModel(
@@ -117,6 +118,7 @@ class DashboardViewModel(
                     SyncResult.NetworkUnavailable -> DashboardMessage.SyncNetworkUnavailable
                     SyncResult.WifiRequired -> DashboardMessage.SyncWifiRequired
                     SyncResult.ApiNotConfigured -> DashboardMessage.SyncApiNotConfigured
+                    SyncResult.AuthRequired -> DashboardMessage.SyncAuthRequired
                 }
             )
         }

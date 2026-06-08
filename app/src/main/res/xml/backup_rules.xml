@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <full-backup-content>
-    <!-- Exclude secure prefs (agent token) and local DB from backups -->
+    <!-- Exclude secure prefs (access token) and local DB from backups -->
     <exclude domain="sharedpref" path="secure_prefs.xml" />
     <exclude domain="database" path="callsync.db" />
 </full-backup-content>

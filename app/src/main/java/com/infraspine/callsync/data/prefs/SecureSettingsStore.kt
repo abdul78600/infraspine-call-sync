@@ -7,11 +7,9 @@ import androidx.security.crypto.MasterKey
 import androidx.core.content.edit
 
 /**
- * Stores CRM connection config and the agent token using EncryptedSharedPreferences,
- * so the token is encrypted at rest and never lands in plaintext prefs or logs.
- *
- * Read access to [agentToken] should remain narrow — never log it, never include it
- * in crash reports or analytics.
+ * Stores CRM connection config and authenticated session details using
+ * EncryptedSharedPreferences, so tokens are encrypted at rest and never land in
+ * plaintext prefs or logs.
  */
 class SecureSettingsStore(context: Context) {
 
@@ -33,9 +31,21 @@ class SecureSettingsStore(context: Context) {
         get() = prefs.getString(KEY_CRM_URL, null)?.takeIf { it.isNotBlank() }
         set(value) = prefs.edit { putString(KEY_CRM_URL, value?.trim()) }
 
-    var agentToken: String?
-        get() = prefs.getString(KEY_AGENT_TOKEN, null)?.takeIf { it.isNotBlank() }
-        set(value) = prefs.edit { putString(KEY_AGENT_TOKEN, value?.trim()) }
+    var accessToken: String?
+        get() = prefs.getString(KEY_ACCESS_TOKEN, null)?.takeIf { it.isNotBlank() }
+        set(value) = prefs.edit { putString(KEY_ACCESS_TOKEN, value?.trim()) }
+
+    var userId: String?
+        get() = prefs.getString(KEY_USER_ID, null)?.takeIf { it.isNotBlank() }
+        set(value) = prefs.edit { putString(KEY_USER_ID, value?.trim()) }
+
+    var userName: String?
+        get() = prefs.getString(KEY_USER_NAME, null)?.takeIf { it.isNotBlank() }
+        set(value) = prefs.edit { putString(KEY_USER_NAME, value?.trim()) }
+
+    var userEmail: String?
+        get() = prefs.getString(KEY_USER_EMAIL, null)?.takeIf { it.isNotBlank() }
+        set(value) = prefs.edit { putString(KEY_USER_EMAIL, value?.trim()) }
 
     var deviceId: String?
         get() = prefs.getString(KEY_DEVICE_ID, null)
@@ -63,13 +73,28 @@ class SecureSettingsStore(context: Context) {
         set(value) = prefs.edit { putLong(KEY_LAST_SYNCED_CALL_LOG_ID, value) }
 
     fun isCrmConfigured(): Boolean =
-        !crmServerUrl.isNullOrBlank() && !agentToken.isNullOrBlank()
+        !crmServerUrl.isNullOrBlank() && !accessToken.isNullOrBlank()
+
+    fun hasValidSession(): Boolean = !accessToken.isNullOrBlank()
+
+    fun clearAuth() {
+        prefs.edit {
+            remove(KEY_ACCESS_TOKEN)
+            remove(KEY_USER_ID)
+            remove(KEY_USER_NAME)
+            remove(KEY_USER_EMAIL)
+            remove(KEY_LAST_SYNCED_CALL_LOG_ID)
+        }
+    }
 
     companion object {
         private const val PREFS_FILE_NAME = "secure_prefs"
 
         private const val KEY_CRM_URL = "crm_server_url"
-        private const val KEY_AGENT_TOKEN = "agent_token"
+        private const val KEY_ACCESS_TOKEN = "access_token"
+        private const val KEY_USER_ID = "user_id"
+        private const val KEY_USER_NAME = "user_name"
+        private const val KEY_USER_EMAIL = "user_email"
         private const val KEY_DEVICE_ID = "device_id"
         private const val KEY_FOLDER_URI = "selected_folder_uri"
         private const val KEY_WIFI_ONLY = "sync_wifi_only"
