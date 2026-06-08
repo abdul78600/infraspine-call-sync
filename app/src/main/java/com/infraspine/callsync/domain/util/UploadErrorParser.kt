@@ -65,7 +65,10 @@ object UploadErrorParser {
     }
 
     private fun fromFieldErrorMap(map: JSONObject): String? {
-        val messages = map.keys().asSequence().mapNotNull { field ->
+        // JSONObject.keys() returns a raw java.util.Iterator on Android (the org.json
+        // fork predates generics), so each element surfaces as a platform type — cast
+        // explicitly to String before using it as a JSONObject key.
+        val messages = map.keys().asSequence().mapNotNull { it as? String }.mapNotNull { field ->
             val value = map.opt(field)
             val message = when (value) {
                 is String -> value
