@@ -1,6 +1,8 @@
 package com.infraspine.callsync.ui.recordings
 
 import android.os.Bundle
+import android.text.Editable
+import android.text.TextWatcher
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -46,6 +48,14 @@ class RecordingsFragment : Fragment() {
         binding.recyclerRecordings.layoutManager = LinearLayoutManager(requireContext())
         binding.recyclerRecordings.adapter = adapter
 
+        binding.editSearch.addTextChangedListener(object : TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) = Unit
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) = Unit
+            override fun afterTextChanged(s: Editable?) {
+                viewModel.setSearchQuery(s?.toString().orEmpty())
+            }
+        })
+
         binding.chipGroupFilter.setOnCheckedStateChangeListener { _, checkedIds ->
             val filter = when (checkedIds.firstOrNull()) {
                 binding.chipPending.id -> RecordingFilter.PENDING
@@ -59,8 +69,19 @@ class RecordingsFragment : Fragment() {
 
         viewModel.recordings.observe(viewLifecycleOwner) { recordings ->
             adapter.submitList(recordings)
-            binding.textEmptyState.visibility = if (recordings.isEmpty()) View.VISIBLE else View.GONE
-            binding.recyclerRecordings.visibility = if (recordings.isEmpty()) View.GONE else View.VISIBLE
+
+            val empty = recordings.isEmpty()
+            binding.recyclerRecordings.visibility = if (empty) View.GONE else View.VISIBLE
+            binding.textEmptyState.visibility = if (empty) View.VISIBLE else View.GONE
+
+            if (empty) {
+                val query = viewModel.searchQuery.value.orEmpty()
+                binding.textEmptyState.text = if (query.isNotBlank()) {
+                    getString(R.string.no_search_results, query)
+                } else {
+                    getString(R.string.no_recordings_found)
+                }
+            }
         }
     }
 

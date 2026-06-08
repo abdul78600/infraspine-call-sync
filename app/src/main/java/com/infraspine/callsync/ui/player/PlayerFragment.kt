@@ -47,6 +47,10 @@ class PlayerFragment : Fragment() {
             viewModel.recording.value?.let { viewModel.togglePlayback(it.fileUri) }
         }
 
+        binding.buttonSkipBack.setOnClickListener { viewModel.seekBy(-SKIP_INTERVAL_MS) }
+        binding.buttonSkipForward.setOnClickListener { viewModel.seekBy(SKIP_INTERVAL_MS) }
+        binding.buttonPlaybackSpeed.setOnClickListener { viewModel.cyclePlaybackSpeed() }
+
         binding.sliderProgress.addOnSliderTouchListener(object : Slider.OnSliderTouchListener {
             override fun onStartTrackingTouch(slider: Slider) {
                 isUserSeeking = true
@@ -78,6 +82,10 @@ class PlayerFragment : Fragment() {
             binding.buttonPlayPause.setIconResource(
                 if (playing) android.R.drawable.ic_media_pause else android.R.drawable.ic_media_play
             )
+        }
+
+        viewModel.playbackSpeed.observe(viewLifecycleOwner) { speed ->
+            binding.buttonPlaybackSpeed.text = getString(R.string.playback_speed_format, speed)
         }
 
         viewModel.durationMs.observe(viewLifecycleOwner) { duration ->
@@ -112,6 +120,7 @@ class PlayerFragment : Fragment() {
 
     companion object {
         private const val ARG_RECORDING_ID = "recordingId"
+        private const val SKIP_INTERVAL_MS = 10_000
 
         fun args(recordingId: Long): Bundle = bundleOf(ARG_RECORDING_ID to recordingId)
     }

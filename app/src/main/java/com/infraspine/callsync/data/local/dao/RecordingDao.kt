@@ -37,6 +37,25 @@ interface RecordingDao {
     @Query("SELECT * FROM recordings WHERE syncStatus = :status ORDER BY callStartedAt DESC, lastModified DESC")
     fun observeByStatus(status: SyncStatus): Flow<List<RecordingEntity>>
 
+    /**
+     * Matches [query] against file name or phone number. The repository wraps the raw
+     * search text in `%...%` before binding, so this stays a plain parameterized LIKE
+     * (Room binds `:query` safely — no string concatenation, no injection risk).
+     */
+    @Query(
+        """SELECT * FROM recordings
+           WHERE (fileName LIKE :query OR phoneNumber LIKE :query)
+           ORDER BY callStartedAt DESC, lastModified DESC"""
+    )
+    fun observeBySearch(query: String): Flow<List<RecordingEntity>>
+
+    @Query(
+        """SELECT * FROM recordings
+           WHERE syncStatus = :status AND (fileName LIKE :query OR phoneNumber LIKE :query)
+           ORDER BY callStartedAt DESC, lastModified DESC"""
+    )
+    fun observeByStatusAndSearch(status: SyncStatus, query: String): Flow<List<RecordingEntity>>
+
     @Query("SELECT * FROM recordings WHERE syncStatus = :status")
     suspend fun getByStatus(status: SyncStatus): List<RecordingEntity>
 

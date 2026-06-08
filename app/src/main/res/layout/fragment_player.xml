@@ -83,16 +83,61 @@
 
             </LinearLayout>
 
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/spacing_md"
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/buttonSkipBack"
+                    style="@style/Widget.MaterialComponents.Button.TextButton"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:contentDescription="@string/skip_back"
+                    app:icon="@drawable/ic_skip_back_10"
+                    app:iconPadding="0dp" />
+
+                <Space
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/buttonPlayPause"
+                    style="@style/Widget.MaterialComponents.Button"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:minWidth="160dp"
+                    android:text="@string/play"
+                    app:icon="@android:drawable/ic_media_play" />
+
+                <Space
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/buttonSkipForward"
+                    style="@style/Widget.MaterialComponents.Button.TextButton"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:contentDescription="@string/skip_forward"
+                    app:icon="@drawable/ic_skip_forward_10"
+                    app:iconPadding="0dp" />
+
+            </LinearLayout>
+
             <com.google.android.material.button.MaterialButton
-                android:id="@+id/buttonPlayPause"
-                style="@style/Widget.MaterialComponents.Button"
+                android:id="@+id/buttonPlaybackSpeed"
+                style="@style/Widget.MaterialComponents.Button.OutlinedButton"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_gravity="center_horizontal"
                 android:layout_marginTop="@dimen/spacing_md"
-                android:minWidth="160dp"
-                android:text="@string/play"
-                app:icon="@android:drawable/ic_media_play" />
+                android:minWidth="96dp"
+                android:text="@string/playback_speed_default" />
 
         </LinearLayout>
 

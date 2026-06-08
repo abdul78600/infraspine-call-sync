@@ -27,6 +27,8 @@
     <string name="filter_unmatched">Unmatched</string>
     <string name="unmatched_label">Unmatched</string>
     <string name="no_recordings_found">No recordings found. Tap \"Scan Now\" to scan the selected folder.</string>
+    <string name="search_recordings_hint">Search by file name or phone number</string>
+    <string name="no_search_results">No recordings match \"%1$s\"</string>
 
     <!-- Player -->
     <string name="player_title">Now Playing</string>
@@ -34,6 +36,10 @@
     <string name="pause">Pause</string>
     <string name="player_load_failed">Couldn\'t load this recording for playback</string>
     <string name="player_playback_failed">Playback failed — the file may be unreadable or in an unsupported format</string>
+    <string name="skip_back">Skip back 10 seconds</string>
+    <string name="skip_forward">Skip forward 10 seconds</string>
+    <string name="playback_speed_default">1.0x</string>
+    <string name="playback_speed_format">%.2fx</string>
 
     <!-- Call history -->
     <string name="call_history_title">Call History</string>

@@ -50,6 +50,11 @@ class PlayerViewModel(
     private val _durationMs = MutableLiveData(0)
     val durationMs: LiveData<Int> = _durationMs
 
+    private val _playbackSpeed = MutableLiveData(PLAYBACK_SPEEDS[DEFAULT_SPEED_INDEX])
+    val playbackSpeed: LiveData<Float> = _playbackSpeed
+
+    private var speedIndex = DEFAULT_SPEED_INDEX
+
     private val _error = MutableLiveData<Event<PlaybackError>>()
     val error: LiveData<Event<PlaybackError>> = _error
 
@@ -82,6 +87,7 @@ class PlayerViewModel(
                 _isPrepared.value = true
                 _durationMs.value = it.duration
                 it.start()
+                applyPlaybackSpeed(_playbackSpeed.value ?: PLAYBACK_SPEEDS[DEFAULT_SPEED_INDEX])
                 _isPlaying.value = true
                 startProgressUpdates()
             }
@@ -121,6 +127,30 @@ class PlayerViewModel(
     fun seekTo(positionMs: Int) {
         runCatching { mediaPlayer?.seekTo(positionMs) }
         _positionMs.value = positionMs
+    }
+
+    /** Seeks relative to the current position, clamped to [0, duration]. Negative rewinds. */
+    fun seekBy(deltaMs: Int) {
+        val player = mediaPlayer ?: return
+        val target = (player.currentPosition + deltaMs).coerceIn(0, player.duration.coerceAtLeast(0))
+        seekTo(target)
+    }
+
+    /** Cycles through [PLAYBACK_SPEEDS] and applies the new rate to the active player. */
+    fun cyclePlaybackSpeed() {
+        speedIndex = (speedIndex + 1) % PLAYBACK_SPEEDS.size
+        val speed = PLAYBACK_SPEEDS[speedIndex]
+        _playbackSpeed.value = speed
+        applyPlaybackSpeed(speed)
+    }
+
+    private fun applyPlaybackSpeed(speed: Float) {
+        val player = mediaPlayer ?: return
+        val wasPlaying = player.isPlaying
+        runCatching {
+            player.playbackParams = player.playbackParams.setSpeed(speed)
+            if (!wasPlaying) player.pause()
+        }
     }
 
     private fun startProgressUpdates() {
@@ -173,5 +203,9 @@ class PlayerViewModel(
 
     private companion object {
         const val PROGRESS_UPDATE_INTERVAL_MS = 250L
+
+        /** Cycle order shown via repeated taps on the speed button. */
+        val PLAYBACK_SPEEDS = floatArrayOf(1.0f, 1.25f, 1.5f, 2.0f, 0.5f, 0.75f)
+        const val DEFAULT_SPEED_INDEX = 0
     }
 }

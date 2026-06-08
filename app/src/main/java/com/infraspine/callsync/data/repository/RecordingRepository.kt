@@ -36,6 +36,24 @@ class RecordingRepository(
 
     fun observeByStatus(status: SyncStatus): Flow<List<RecordingEntity>> = dao.observeByStatus(status)
 
+    /**
+     * Observes recordings matching [searchQuery] (file name or phone number, case-insensitive
+     * substring) and optionally [status]. Pass a blank query to fall back to the unfiltered list.
+     */
+    fun observeFiltered(status: SyncStatus?, searchQuery: String): Flow<List<RecordingEntity>> {
+        val trimmed = searchQuery.trim()
+        if (trimmed.isEmpty()) {
+            return if (status == null) observeAll() else observeByStatus(status)
+        }
+
+        val likePattern = "%${trimmed.replace("%", "\\%").replace("_", "\\_")}%"
+        return if (status == null) {
+            dao.observeBySearch(likePattern)
+        } else {
+            dao.observeByStatusAndSearch(status, likePattern)
+        }
+    }
+
     fun observeTotalCount(): Flow<Int> = dao.observeTotalCount()
 
     fun observeCountByStatus(status: SyncStatus): Flow<Int> = dao.observeCountByStatus(status)
