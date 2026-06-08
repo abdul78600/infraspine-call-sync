@@ -13,10 +13,7 @@ import kotlinx.coroutines.withContext
 class RecordingScanner(private val context: Context) {
 
     suspend fun scan(folder: DocumentFile): List<ScannedAudioFile> = withContext(Dispatchers.IO) {
-        folder.listFiles()
-            .asSequence()
-            .filter { it.isFile && it.canRead() }
-            .filter { isSupportedAudio(it) }
+        collectAudioFiles(folder, depth = 0)
             .map {
                 ScannedAudioFile(
                     uri = it.uri.toString(),
@@ -27,6 +24,21 @@ class RecordingScanner(private val context: Context) {
                 )
             }
             .toList()
+    }
+
+    /**
+     * Recordings are often nested a level or two below the folder the user picks
+     * (e.g. "Recordings/Call"), so walk subfolders up to [MAX_SCAN_DEPTH] deep.
+     */
+    private fun collectAudioFiles(folder: DocumentFile, depth: Int): List<DocumentFile> {
+        val children = folder.listFiles().orEmpty()
+        val files = children.filter { it.isFile && it.canRead() && isSupportedAudio(it) }
+        if (depth >= MAX_SCAN_DEPTH) return files
+
+        val nested = children
+            .filter { it.isDirectory && it.canRead() }
+            .flatMap { collectAudioFiles(it, depth + 1) }
+        return files + nested
     }
 
     private fun isSupportedAudio(file: DocumentFile): Boolean {
@@ -43,6 +55,8 @@ class RecordingScanner(private val context: Context) {
     }
 
     companion object {
+        private const val MAX_SCAN_DEPTH = 2
+
         val SUPPORTED_EXTENSIONS = setOf("mp3", "m4a", "amr", "wav", "aac", "ogg")
 
         private val EXTENSION_TO_MIME = mapOf(
