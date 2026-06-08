@@ -97,7 +97,7 @@ object NetworkDiagnostics {
         mimeType: String?,
         fileExtension: String,
         phoneNumber: String?,
-        callStartedAt: Long?,
+        callStartedAt: String?,
         durationSeconds: Long?,
         callType: String,
         deviceId: String,

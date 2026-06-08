@@ -15,6 +15,9 @@ import okhttp3.RequestBody.Companion.asRequestBody
 import okhttp3.RequestBody.Companion.toRequestBody
 import java.io.File
 import java.io.IOException
+import java.time.Instant
+import java.time.ZoneOffset
+import java.time.format.DateTimeFormatter
 
 /**
  * Real CRM uploader: streams the recording referenced by its SAF URI into a
@@ -43,7 +46,7 @@ class RealCrmUploader(
             } ?: return@withContext UploadOutcome.Failure("Recording file is no longer accessible")
 
             try {
-                val mediaType = (recording.mimeType ?: "audio/*").toMediaTypeOrNull()
+                val mediaType = resolveMediaType(recording).toMediaTypeOrNull()
                 val filePart = MultipartBody.Part.createFormData(
                     "file",
                     recording.fileName,
@@ -56,9 +59,9 @@ class RealCrmUploader(
                     mimeType = recording.mimeType,
                     fileExtension = recording.fileName.substringAfterLast('.', missingDelimiterValue = ""),
                     phoneNumber = recording.phoneNumber,
-                    callStartedAt = recording.callStartedAt,
+                    callStartedAt = recording.callStartedAt?.toIso8601(),
                     durationSeconds = recording.durationSeconds,
-                    callType = recording.callType.name,
+                    callType = recording.callType.name.lowercase(),
                     deviceId = deviceId,
                     uploadUrl = resolvedUploadUrl()
                 )
@@ -66,9 +69,9 @@ class RealCrmUploader(
                 val response = api.uploadCallRecording(
                     file = filePart,
                     phoneNumber = recording.phoneNumber?.toPlainTextBody(),
-                    callStartedAt = recording.callStartedAt?.toString()?.toPlainTextBody(),
+                    callStartedAt = recording.callStartedAt?.toIso8601()?.toPlainTextBody(),
                     durationSeconds = recording.durationSeconds?.toString()?.toPlainTextBody(),
-                    callType = recording.callType.name.toPlainTextBody(),
+                    callType = recording.callType.name.lowercase().toPlainTextBody(),
                     deviceId = deviceId.toPlainTextBody(),
                     originalFileName = recording.fileName.toPlainTextBody()
                 )
@@ -116,10 +119,48 @@ class RealCrmUploader(
         return tempFile
     }
 
+    /**
+     * Resolves a concrete `Content-Type` for the file part. Prefers the stored
+     * [RecordingEntity.mimeType], then maps the file extension to a concrete audio
+     * type (so `.aac` -> `audio/aac`), and finally falls back to
+     * `application/octet-stream` — never a wildcard like `audio/*`, which some
+     * multipart parsers reject.
+     */
+    private fun resolveMediaType(recording: RecordingEntity): String {
+        recording.mimeType?.takeIf { it.isNotBlank() && it != "audio/*" }?.let { return it }
+        val ext = recording.fileName.substringAfterLast('.', missingDelimiterValue = "").lowercase()
+        return EXTENSION_MIME_TYPES[ext] ?: "application/octet-stream"
+    }
+
     private fun String.toPlainTextBody(): RequestBody = toRequestBody("text/plain".toMediaTypeOrNull())
+
+    /**
+     * Formats an epoch-millis timestamp as an ISO-8601 instant in UTC with fixed
+     * millisecond precision (e.g. "2026-06-08T12:30:00.000Z"), which is the shape
+     * the CRM upload endpoint expects for `callStartedAt` — not raw epoch millis.
+     * Pinned to 3-digit millis so the value is stable regardless of the timestamp.
+     */
+    private fun Long.toIso8601(): String =
+        ISO_MILLIS_UTC.format(Instant.ofEpochMilli(this))
 
     private companion object {
         /** Must match the path in [CrmApiService.uploadCallRecording]'s `@POST` annotation. */
         const val UPLOAD_PATH = "api/crm/call-recordings/upload"
+
+        /** ISO-8601 in UTC with always-3-digit millis, e.g. "2026-06-08T12:30:00.000Z". */
+        val ISO_MILLIS_UTC: DateTimeFormatter =
+            DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'").withZone(ZoneOffset.UTC)
+
+        /** Concrete audio MIME types by file extension, used when the stored mimeType is missing/wildcard. */
+        val EXTENSION_MIME_TYPES = mapOf(
+            "aac" to "audio/aac",
+            "m4a" to "audio/mp4",
+            "mp3" to "audio/mpeg",
+            "amr" to "audio/amr",
+            "3gp" to "audio/3gpp",
+            "wav" to "audio/wav",
+            "ogg" to "audio/ogg",
+            "opus" to "audio/opus"
+        )
     }
 }
