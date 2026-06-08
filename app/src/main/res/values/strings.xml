@@ -28,6 +28,13 @@
     <string name="unmatched_label">Unmatched</string>
     <string name="no_recordings_found">No recordings found. Tap \"Scan Now\" to scan the selected folder.</string>
 
+    <!-- Player -->
+    <string name="player_title">Now Playing</string>
+    <string name="play">Play</string>
+    <string name="pause">Pause</string>
+    <string name="player_load_failed">Couldn\'t load this recording for playback</string>
+    <string name="player_playback_failed">Playback failed — the file may be unreadable or in an unsupported format</string>
+
     <!-- Call history -->
     <string name="call_history_title">Call History</string>
     <string name="call_has_recording">Recorded</string>
@@ -48,6 +55,14 @@
     <string name="save_settings">Save Settings</string>
     <string name="settings_saved">Settings saved</string>
     <string name="folder_section_title">Recording Folder</string>
+    <string name="update_section_title">App Updates</string>
+    <string name="check_for_updates">Check for Updates</string>
+    <string name="checking_for_updates">Checking…</string>
+    <string name="update_up_to_date">You\'re running the latest build</string>
+    <string name="update_available_title">A new build is available</string>
+    <string name="update_available_message">Tap to open the download page in your browser, then install the new APK.</string>
+    <string name="update_download">Download update</string>
+    <string name="update_check_failed">Couldn\'t check for updates: %1$s</string>
     <string name="server_section_title">CRM Server</string>
     <string name="sync_section_title">Sync Options</string>
 

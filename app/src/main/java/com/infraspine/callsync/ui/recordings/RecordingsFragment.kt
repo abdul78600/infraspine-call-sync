@@ -6,9 +6,12 @@ import android.view.View
 import android.view.ViewGroup
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.viewModels
+import androidx.navigation.fragment.findNavController
 import androidx.recyclerview.widget.LinearLayoutManager
 import com.infraspine.callsync.CallSyncApplication
+import com.infraspine.callsync.R
 import com.infraspine.callsync.databinding.FragmentRecordingsBinding
+import com.infraspine.callsync.ui.player.PlayerFragment
 
 class RecordingsFragment : Fragment() {
 
@@ -21,7 +24,12 @@ class RecordingsFragment : Fragment() {
         RecordingsViewModel.Factory(container)
     }
 
-    private val adapter = RecordingsAdapter()
+    private val adapter = RecordingsAdapter { recording ->
+        findNavController().navigate(
+            R.id.action_recordings_to_player,
+            PlayerFragment.args(recording.id)
+        )
+    }
 
     override fun onCreateView(
         inflater: LayoutInflater,

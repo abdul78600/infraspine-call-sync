@@ -17,21 +17,28 @@ import com.infraspine.callsync.ui.common.orUnmatched
 import com.infraspine.callsync.ui.common.toDisplayDateTime
 import com.infraspine.callsync.ui.common.toDisplayDuration
 
-class RecordingsAdapter : ListAdapter<RecordingEntity, RecordingsAdapter.ViewHolder>(DIFF_CALLBACK) {
+class RecordingsAdapter(
+    private val onRecordingClick: (RecordingEntity) -> Unit
+) : ListAdapter<RecordingEntity, RecordingsAdapter.ViewHolder>(DIFF_CALLBACK) {
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): ViewHolder {
         val binding = ItemRecordingBinding.inflate(LayoutInflater.from(parent.context), parent, false)
-        return ViewHolder(binding)
+        return ViewHolder(binding, onRecordingClick)
     }
 
     override fun onBindViewHolder(holder: ViewHolder, position: Int) {
         holder.bind(getItem(position))
     }
 
-    class ViewHolder(private val binding: ItemRecordingBinding) : RecyclerView.ViewHolder(binding.root) {
+    class ViewHolder(
+        private val binding: ItemRecordingBinding,
+        private val onRecordingClick: (RecordingEntity) -> Unit
+    ) : RecyclerView.ViewHolder(binding.root) {
 
         fun bind(recording: RecordingEntity) {
             val context = binding.root.context
+
+            binding.root.setOnClickListener { onRecordingClick(recording) }
 
             binding.textFileName.text = recording.fileName
             binding.textPhoneNumber.text = recording.phoneNumber.orUnmatched(context)

@@ -28,7 +28,18 @@
         android:id="@+id/recordingsFragment"
         android:name="com.infraspine.callsync.ui.recordings.RecordingsFragment"
         android:label="@string/recordings_title"
-        tools:layout="@layout/fragment_recordings" />
+        tools:layout="@layout/fragment_recordings">
+
+        <action
+            android:id="@+id/action_recordings_to_player"
+            app:destination="@id/playerFragment" />
+    </fragment>
+
+    <fragment
+        android:id="@+id/playerFragment"
+        android:name="com.infraspine.callsync.ui.player.PlayerFragment"
+        android:label="@string/player_title"
+        tools:layout="@layout/fragment_player" />
 
     <fragment
         android:id="@+id/callHistoryFragment"

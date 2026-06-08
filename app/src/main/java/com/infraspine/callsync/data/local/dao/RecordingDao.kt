@@ -28,6 +28,9 @@ interface RecordingDao {
     @Query("SELECT * FROM recordings WHERE fileUri = :uri AND fileSize = :size LIMIT 1")
     suspend fun findByUriAndSize(uri: String, size: Long): RecordingEntity?
 
+    @Query("SELECT * FROM recordings WHERE id = :id LIMIT 1")
+    fun observeById(id: Long): Flow<RecordingEntity?>
+
     @Query("SELECT * FROM recordings ORDER BY callStartedAt DESC, lastModified DESC")
     fun observeAll(): Flow<List<RecordingEntity>>
 

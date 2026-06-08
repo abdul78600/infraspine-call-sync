@@ -30,6 +30,8 @@ class RecordingRepository(
     private val hasCallLogPermission: () -> Boolean
 ) {
 
+    fun observeById(id: Long): Flow<RecordingEntity?> = dao.observeById(id)
+
     fun observeAll(): Flow<List<RecordingEntity>> = dao.observeAll()
 
     fun observeByStatus(status: SyncStatus): Flow<List<RecordingEntity>> = dao.observeByStatus(status)
