@@ -43,6 +43,28 @@ interface CrmApiService {
     suspend fun syncCallLogs(
         @Body request: CallLogsSyncRequest
     ): Response<CallLogsSyncResponse>
+
+    /**
+     * Returns which of the given call logs already exist on the server, so the
+     * app can skip re-uploading them. A 404/501 response means the backend
+     * doesn't support this endpoint yet — callers should treat all records as
+     * missing (i.e. fall back to current upload-everything behavior).
+     */
+    @POST("api/crm/call-logs/check-existing")
+    suspend fun checkExistingCallLogs(
+        @Body request: CallLogExistingCheckRequest
+    ): Response<CallLogExistingCheckResponse>
+
+    /**
+     * Returns which of the given recordings already exist on the server, so the
+     * app can skip re-uploading them. A 404/501 response means the backend
+     * doesn't support this endpoint yet — callers should treat all records as
+     * missing (i.e. fall back to current upload-everything behavior).
+     */
+    @POST("api/crm/call-recordings/check-existing")
+    suspend fun checkExistingRecordings(
+        @Body request: RecordingExistingCheckRequest
+    ): Response<RecordingExistingCheckResponse>
 }
 
 /**

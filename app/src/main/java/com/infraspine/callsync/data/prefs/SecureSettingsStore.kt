@@ -5,6 +5,7 @@ import android.content.SharedPreferences
 import androidx.security.crypto.EncryptedSharedPreferences
 import androidx.security.crypto.MasterKey
 import androidx.core.content.edit
+import com.infraspine.callsync.domain.sync.SyncProfile
 
 /**
  * Stores CRM connection config and authenticated session details using
@@ -68,9 +69,43 @@ class SecureSettingsStore(context: Context) {
         get() = prefs.getBoolean(KEY_DUMMY_MODE, true)
         set(value) = prefs.edit { putBoolean(KEY_DUMMY_MODE, value) }
 
-    var lastSyncedCallLogId: Long
-        get() = prefs.getLong(KEY_LAST_SYNCED_CALL_LOG_ID, 0L)
-        set(value) = prefs.edit { putLong(KEY_LAST_SYNCED_CALL_LOG_ID, value) }
+    /**
+     * The active sync profile key for (crmServerUrl, userId, deviceId). Cursors and
+     * "reset sync history" are scoped to this key so different servers/accounts/devices
+     * never share sync state.
+     */
+    fun activeSyncProfileKey(deviceId: String): String =
+        SyncProfile.keyFor(crmServerUrl, userId, deviceId)
+
+    /**
+     * Per-profile call-log cursor: the highest device CallLog `_ID` successfully
+     * synced for this profile. Falls back to (and one-time-seeds from) the legacy
+     * global cursor for users upgrading from before per-profile cursors existed.
+     */
+    fun lastSyncedCallLogId(profileKey: String): Long {
+        val key = callLogCursorKey(profileKey)
+        if (prefs.contains(key)) return prefs.getLong(key, 0L)
+
+        // First read for this profile: seed from the legacy global cursor (if any
+        // profile-scoped cursor exists already, a different profile has already
+        // claimed the legacy value, so this profile starts at 0).
+        val legacyValue = prefs.getLong(KEY_LAST_SYNCED_CALL_LOG_ID, 0L)
+        val anyProfileCursorExists = prefs.all.keys.any { it.startsWith(KEY_LAST_SYNCED_CALL_LOG_ID_PREFIX) }
+        val seed = if (legacyValue > 0L && !anyProfileCursorExists) legacyValue else 0L
+        prefs.edit { putLong(key, seed) }
+        return seed
+    }
+
+    fun setLastSyncedCallLogId(profileKey: String, value: Long) {
+        prefs.edit { putLong(callLogCursorKey(profileKey), value) }
+    }
+
+    /** Clears only this profile's call-log cursor (used by "Reset sync history"). */
+    fun resetCallLogCursor(profileKey: String) {
+        prefs.edit { remove(callLogCursorKey(profileKey)) }
+    }
+
+    private fun callLogCursorKey(profileKey: String) = "$KEY_LAST_SYNCED_CALL_LOG_ID_PREFIX$profileKey"
 
     fun isCrmConfigured(): Boolean =
         !crmServerUrl.isNullOrBlank() && !accessToken.isNullOrBlank()
@@ -83,7 +118,6 @@ class SecureSettingsStore(context: Context) {
             remove(KEY_USER_ID)
             remove(KEY_USER_NAME)
             remove(KEY_USER_EMAIL)
-            remove(KEY_LAST_SYNCED_CALL_LOG_ID)
         }
     }
 
@@ -100,6 +134,9 @@ class SecureSettingsStore(context: Context) {
         private const val KEY_WIFI_ONLY = "sync_wifi_only"
         private const val KEY_AUTO_SYNC = "auto_sync_enabled"
         private const val KEY_DUMMY_MODE = "dummy_test_mode"
+
+        /** Legacy global cursor, kept only as a one-time seed source for per-profile cursors. */
         private const val KEY_LAST_SYNCED_CALL_LOG_ID = "last_synced_call_log_id"
+        private const val KEY_LAST_SYNCED_CALL_LOG_ID_PREFIX = "last_synced_call_log_id_"
     }
 }

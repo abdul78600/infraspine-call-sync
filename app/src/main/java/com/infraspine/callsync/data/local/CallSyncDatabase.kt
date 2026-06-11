@@ -10,7 +10,7 @@ import com.infraspine.callsync.data.local.entity.RecordingEntity
 
 @Database(
     entities = [RecordingEntity::class],
-    version = 1,
+    version = 2,
     exportSchema = false
 )
 @TypeConverters(Converters::class)
@@ -30,7 +30,7 @@ abstract class CallSyncDatabase : RoomDatabase() {
                     context.applicationContext,
                     CallSyncDatabase::class.java,
                     DB_NAME
-                ).build().also { instance = it }
+                ).addMigrations(MIGRATION_1_2).build().also { instance = it }
             }
     }
 }

@@ -85,6 +85,12 @@
     <string name="update_check_failed">Couldn\'t check for updates: %1$s</string>
     <string name="server_section_title">CRM Server</string>
     <string name="sync_section_title">Sync Options</string>
+    <string name="sync_history_section_title">Sync History</string>
+    <string name="reset_sync_history">Reset sync history</string>
+    <string name="reset_sync_history_summary">Re-checks all call logs and recordings against the server. Already-uploaded items will not be duplicated.</string>
+    <string name="reset_sync_history_confirm_title">Reset sync history?</string>
+    <string name="reset_sync_history_confirm_message">This re-checks all call logs and recordings against the server on the next sync. Already-uploaded items will not be duplicated.</string>
+    <string name="reset_sync_history_done">Sync history reset</string>
 
     <!-- Errors / status messages -->
     <string name="error_no_folder">Please select a recording folder first</string>
@@ -115,7 +121,7 @@
     <string name="call_unknown">Unknown</string>
 
     <string name="scan_complete">Scan complete: %1$d recording(s) found</string>
-    <string name="sync_complete">Sync complete: %1$d recording(s) uploaded, %2$d failed. Call logs: %3$d uploaded, %4$d skipped, %5$d failed.</string>
+    <string name="sync_complete">Sync complete: %1$d uploaded, %2$d already on server, %3$d failed. Call logs: %4$d uploaded, %5$d already on server, %6$d skipped, %7$d failed.</string>
     <string name="sync_in_progress">Syncing…</string>
     <string name="scan_in_progress">Scanning…</string>
 </resources>

@@ -1,0 +1,35 @@
+package com.infraspine.callsync.domain.sync
+
+import java.security.MessageDigest
+
+/**
+ * Identifies a unique (server, account, device) sync context. Cursors and
+ * "reset sync history" actions are scoped to a profile key so that switching
+ * CRM servers or logging in as a different user starts a fresh incremental
+ * sync history without affecting other profiles.
+ */
+object SyncProfile {
+
+    /**
+     * Builds a stable identifier from the normalized server base URL, the
+     * logged-in user id, and the device id. The same logical profile always
+     * produces the same key.
+     */
+    fun keyFor(serverBaseUrl: String?, userId: String?, deviceId: String?): String {
+        val normalizedUrl = normalizeUrl(serverBaseUrl)
+        val raw = "$normalizedUrl|${userId.orEmpty()}|${deviceId.orEmpty()}"
+        return sha256Hex(raw)
+    }
+
+    /** Mirrors CrmApiFactory's base-URL normalization (trailing slash) plus lowercasing. */
+    private fun normalizeUrl(url: String?): String {
+        val trimmed = url?.trim()?.takeIf { it.isNotBlank() } ?: return ""
+        val withSlash = if (trimmed.endsWith("/")) trimmed else "$trimmed/"
+        return withSlash.lowercase()
+    }
+
+    private fun sha256Hex(input: String): String {
+        val digest = MessageDigest.getInstance("SHA-256").digest(input.toByteArray(Charsets.UTF_8))
+        return digest.joinToString("") { "%02x".format(it) }
+    }
+}

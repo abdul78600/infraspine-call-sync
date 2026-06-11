@@ -15,7 +15,8 @@ import com.infraspine.callsync.domain.model.SyncStatus
     tableName = "recordings",
     indices = [
         Index(value = ["fileUri", "fileSize"], unique = true),
-        Index(value = ["syncStatus"])
+        Index(value = ["syncStatus"]),
+        Index(value = ["fileHash"])
     ]
 )
 data class RecordingEntity(
@@ -36,5 +37,8 @@ data class RecordingEntity(
     val syncStatus: SyncStatus,
     val uploadedAt: Long?,
     val serverRecordingId: String?,
-    val errorMessage: String?
+    val errorMessage: String?,
+
+    /** SHA-256 of the file content, computed lazily at sync time for dedup checks. */
+    val fileHash: String? = null
 )

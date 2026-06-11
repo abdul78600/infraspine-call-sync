@@ -76,6 +76,13 @@ interface RecordingDao {
     @Query("UPDATE recordings SET syncStatus = :status, uploadedAt = :uploadedAt, serverRecordingId = :serverId, errorMessage = :error WHERE id = :id")
     suspend fun updateSyncResult(id: Long, status: SyncStatus, uploadedAt: Long?, serverId: String?, error: String?)
 
+    @Query("UPDATE recordings SET fileHash = :hash WHERE id = :id")
+    suspend fun updateFileHash(id: Long, hash: String)
+
+    /** Re-queues all SYNCED recordings as PENDING for "Reset sync history". */
+    @Query("UPDATE recordings SET syncStatus = 'PENDING', uploadedAt = NULL, serverRecordingId = NULL, errorMessage = NULL WHERE syncStatus = 'SYNCED'")
+    suspend fun resetSyncedToPending()
+
     @Query("DELETE FROM recordings")
     suspend fun deleteAll()
 }

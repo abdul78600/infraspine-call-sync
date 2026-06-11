@@ -173,8 +173,10 @@ class DashboardFragment : Fragment() {
                 val summary = getString(
                     R.string.sync_complete,
                     message.uploaded,
+                    message.skippedDuplicate,
                     message.failed,
                     message.callLogsUploaded,
+                    message.callLogsSkippedDuplicate,
                     message.callLogsSkipped,
                     message.callLogsFailed
                 )

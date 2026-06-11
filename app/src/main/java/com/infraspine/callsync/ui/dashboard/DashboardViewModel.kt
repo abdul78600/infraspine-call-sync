@@ -34,8 +34,10 @@ sealed class DashboardMessage {
     data class SyncFinished(
         val uploaded: Int,
         val failed: Int,
+        val skippedDuplicate: Int,
         val callLogsUploaded: Int,
         val callLogsSkipped: Int,
+        val callLogsSkippedDuplicate: Int,
         val callLogsFailed: Int,
         val callLogsError: String?
     ) : DashboardMessage()
@@ -109,8 +111,10 @@ class DashboardViewModel(
                     is SyncResult.Completed -> DashboardMessage.SyncFinished(
                         uploaded = result.uploaded,
                         failed = result.failed,
+                        skippedDuplicate = result.skippedDuplicate,
                         callLogsUploaded = result.callLogsUploaded,
                         callLogsSkipped = result.callLogsSkipped,
+                        callLogsSkippedDuplicate = result.callLogsSkippedDuplicate,
                         callLogsFailed = result.callLogsFailed,
                         callLogsError = result.callLogsError
                     )

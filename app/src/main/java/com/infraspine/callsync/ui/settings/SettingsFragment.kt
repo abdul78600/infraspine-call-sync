@@ -11,6 +11,7 @@ import androidx.fragment.app.Fragment
 import androidx.fragment.app.viewModels
 import androidx.navigation.NavOptions
 import androidx.navigation.fragment.findNavController
+import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.snackbar.Snackbar
 import com.infraspine.callsync.CallSyncApplication
 import com.infraspine.callsync.R
@@ -61,6 +62,15 @@ class SettingsFragment : Fragment() {
             viewModel.checkForUpdates()
         }
 
+        binding.buttonResetSyncHistory.setOnClickListener {
+            MaterialAlertDialogBuilder(requireContext())
+                .setTitle(R.string.reset_sync_history_confirm_title)
+                .setMessage(R.string.reset_sync_history_confirm_message)
+                .setPositiveButton(R.string.reset_sync_history) { _, _ -> viewModel.resetSyncHistory() }
+                .setNegativeButton(android.R.string.cancel, null)
+                .show()
+        }
+
         viewModel.uiState.observe(viewLifecycleOwner) { state ->
             // Avoid clobbering in-progress edits by only setting text when it actually differs.
             if (binding.editCrmUrl.text?.toString() != state.crmServerUrl) {
@@ -102,6 +112,12 @@ class SettingsFragment : Fragment() {
 
         viewModel.updateResult.observe(viewLifecycleOwner) { event ->
             event.getContentIfNotHandled()?.let { handleUpdateResult(it) }
+        }
+
+        viewModel.resetSyncHistoryDone.observe(viewLifecycleOwner) { event ->
+            event.getContentIfNotHandled()?.let {
+                Snackbar.make(binding.root, R.string.reset_sync_history_done, Snackbar.LENGTH_SHORT).show()
+            }
         }
 
         refreshFolderLabel()

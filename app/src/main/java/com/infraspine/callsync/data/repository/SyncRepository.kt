@@ -2,18 +2,25 @@ package com.infraspine.callsync.data.repository
 
 import android.content.Context
 import com.infraspine.callsync.data.local.dao.RecordingDao
+import com.infraspine.callsync.data.local.entity.RecordingEntity
 import com.infraspine.callsync.data.prefs.SecureSettingsStore
+import com.infraspine.callsync.data.remote.CallLogCheckItem
+import com.infraspine.callsync.data.remote.CallLogExistingCheckRequest
 import com.infraspine.callsync.data.remote.CrmApiFactory
 import com.infraspine.callsync.data.remote.CallLogSyncItem
 import com.infraspine.callsync.data.remote.CallLogsSyncRequest
 import com.infraspine.callsync.data.remote.CrmApiService
 import com.infraspine.callsync.data.remote.DummyCrmUploader
 import com.infraspine.callsync.data.remote.RealCrmUploader
+import com.infraspine.callsync.data.remote.RecordingCheckItem
+import com.infraspine.callsync.data.remote.RecordingExistingCheckRequest
 import com.infraspine.callsync.data.remote.RecordingUploader
 import com.infraspine.callsync.data.remote.UploadOutcome
 import com.infraspine.callsync.domain.model.CallType
 import com.infraspine.callsync.domain.model.SyncStatus
+import com.infraspine.callsync.domain.sync.DedupKeyBuilder
 import com.infraspine.callsync.domain.util.DeviceIdProvider
+import com.infraspine.callsync.domain.util.FileHasher
 import com.infraspine.callsync.domain.util.NetworkDiagnostics
 import com.infraspine.callsync.domain.util.NetworkMonitor
 import com.infraspine.callsync.domain.util.UploadErrorParser
@@ -29,8 +36,10 @@ sealed class SyncResult {
     data class Completed(
         val uploaded: Int,
         val failed: Int,
+        val skippedDuplicate: Int = 0,
         val callLogsUploaded: Int = 0,
         val callLogsSkipped: Int = 0,
+        val callLogsSkippedDuplicate: Int = 0,
         val callLogsFailed: Int = 0,
         val callLogsError: String? = null
     ) : SyncResult()
@@ -42,14 +51,38 @@ sealed class SyncResult {
 }
 
 /**
- * Drives the "Sync Now" flow: picks up PENDING (and previously FAILED, for manual retry)
- * recordings and uploads them one at a time, persisting status transitions as it goes
- * so progress survives interruption.
+ * Result of asking the server which of a batch of candidate records it already
+ * has, via a check-existing endpoint.
+ */
+private sealed class ExistenceCheckOutcome {
+    /** [existingRefs] are the `clientRef`s the server already has. */
+    data class Available(val existingRefs: Set<String>) : ExistenceCheckOutcome()
+    /** Endpoint not deployed yet (404/501) — treat all candidates as missing. */
+    object NotSupported : ExistenceCheckOutcome()
+    object Unauthorized : ExistenceCheckOutcome()
+    /** Network/server error — caller should skip this category for this cycle. */
+    data class Error(val message: String) : ExistenceCheckOutcome()
+}
+
+/**
+ * Drives the "Sync Now" flow.
  *
- * Duplicate-upload avoidance is two-layered:
+ * Sync identity is scoped to a "sync profile" — the combination of CRM server
+ * URL, logged-in user, and device id (see [SecureSettingsStore.activeSyncProfileKey]).
+ * Switching servers or accounts starts a fresh incremental-sync history without
+ * affecting other profiles.
+ *
+ * Before uploading, both recordings and call logs are checked against the
+ * server via `check-existing` endpoints so only genuinely missing records are
+ * sent — see [checkExistingRecordings] and [syncCallLogs]. If those endpoints
+ * aren't available yet (404/501), the app falls back to its previous
+ * upload-everything behavior so older backends keep working.
+ *
+ * Duplicate-upload avoidance is layered:
  *  1) [RecordingDao] has a unique index on (fileUri, fileSize) — a recording can only
- *     be tracked once.
- *  2) Only rows in PENDING/FAILED state are picked up here, and a row moves to SYNCED
+ *     be tracked once locally.
+ *  2) check-existing marks server-known records as SYNCED without re-uploading.
+ *  3) Only rows in PENDING/FAILED state are picked up here, and a row moves to SYNCED
  *     immediately on success — so a successfully uploaded recording is never re-sent.
  */
 class SyncRepository(
@@ -83,18 +116,136 @@ class SyncRepository(
             return SyncResult.WifiRequired
         }
 
+        val deviceId = DeviceIdProvider.getOrCreate(context.applicationContext, settingsStore)
+        val uploader = if (settingsStore.dummyTestMode) dummyUploader else realUploader
+        val api = apiFactory.getService()
+
+        val recordingResult = syncRecordings(api, uploader, deviceId)
+        if (recordingResult.authRequired) {
+            return SyncResult.AuthRequired
+        }
+
+        val callLogResult = syncCallLogs(api, deviceId)
+        if (callLogResult.authRequired) {
+            return SyncResult.AuthRequired
+        }
+
+        val didWork = recordingResult.uploaded > 0 ||
+            recordingResult.failed > 0 ||
+            recordingResult.skippedDuplicate > 0 ||
+            callLogResult.uploaded > 0 ||
+            callLogResult.skipped > 0 ||
+            callLogResult.skippedDuplicate > 0 ||
+            callLogResult.failed > 0
+
+        return if (didWork) {
+            SyncResult.Completed(
+                uploaded = recordingResult.uploaded,
+                failed = recordingResult.failed,
+                skippedDuplicate = recordingResult.skippedDuplicate,
+                callLogsUploaded = callLogResult.uploaded,
+                callLogsSkipped = callLogResult.skipped,
+                callLogsSkippedDuplicate = callLogResult.skippedDuplicate,
+                callLogsFailed = callLogResult.failed,
+                callLogsError = callLogResult.errorMessage
+            )
+        } else {
+            SyncResult.NothingToSync
+        }
+    }
+
+    suspend fun syncCallLogsOnly(): CallLogSyncStats {
+        if (!settingsStore.isCrmConfigured() || settingsStore.dummyTestMode) return CallLogSyncStats()
+        if (!networkMonitor.isConnected()) return CallLogSyncStats()
+        if (settingsStore.syncOnWifiOnly && !networkMonitor.isOnWifi()) return CallLogSyncStats()
+
+        val deviceId = DeviceIdProvider.getOrCreate(context.applicationContext, settingsStore)
+        return syncCallLogs(apiFactory.getService(), deviceId)
+    }
+
+    /**
+     * Re-queues all SYNCED recordings as PENDING and resets the call-log cursor for
+     * the active sync profile, so the next sync re-checks full history against the
+     * server. Records the server already has are marked SYNCED again via
+     * check-existing without re-uploading; server-side dedup is the backstop.
+     */
+    suspend fun resetSyncHistory() {
+        val deviceId = DeviceIdProvider.getOrCreate(context.applicationContext, settingsStore)
+        val profileKey = settingsStore.activeSyncProfileKey(deviceId)
+        settingsStore.resetCallLogCursor(profileKey)
+        dao.resetSyncedToPending()
+    }
+
+    // ---------------------------------------------------------------------
+    // Recordings
+    // ---------------------------------------------------------------------
+
+    private data class RecordingSyncStats(
+        val uploaded: Int = 0,
+        val failed: Int = 0,
+        val skippedDuplicate: Int = 0,
+        val authRequired: Boolean = false
+    )
+
+    private suspend fun syncRecordings(
+        api: CrmApiService?,
+        uploader: RecordingUploader,
+        deviceId: String
+    ): RecordingSyncStats {
         val pending = dao.getByStatus(SyncStatus.PENDING)
         val failed = dao.getByStatus(SyncStatus.FAILED)
-        val toUpload = pending + failed
+        var candidates = pending + failed
+        if (candidates.isEmpty()) return RecordingSyncStats()
 
-        val uploader = if (settingsStore.dummyTestMode) dummyUploader else realUploader
-        val deviceId = DeviceIdProvider.getOrCreate(context.applicationContext, settingsStore)
+        var skippedDuplicate = 0
+
+        if (api != null && !settingsStore.dummyTestMode) {
+            // Compute missing file hashes before building the check-existing request.
+            candidates = candidates.map { recording ->
+                if (recording.fileHash != null) return@map recording
+                val hash = FileHasher.sha256(context.applicationContext, recording.fileUri)
+                if (hash != null) {
+                    dao.updateFileHash(recording.id, hash)
+                    recording.copy(fileHash = hash)
+                } else {
+                    recording
+                }
+            }
+
+            when (val outcome = checkExistingRecordings(api, deviceId, candidates)) {
+                is ExistenceCheckOutcome.Available -> {
+                    val (existing, missing) = candidates.partition { it.id.toString() in outcome.existingRefs }
+                    for (recording in existing) {
+                        dao.updateSyncResult(
+                            id = recording.id,
+                            status = SyncStatus.SYNCED,
+                            uploadedAt = System.currentTimeMillis(),
+                            serverId = recording.serverRecordingId,
+                            error = null
+                        )
+                    }
+                    skippedDuplicate = existing.size
+                    candidates = missing
+                }
+                ExistenceCheckOutcome.NotSupported -> {
+                    // Endpoint not deployed yet — upload everything, as before.
+                }
+                ExistenceCheckOutcome.Unauthorized -> {
+                    clearExpiredSession()
+                    return RecordingSyncStats(authRequired = true)
+                }
+                is ExistenceCheckOutcome.Error -> {
+                    NetworkDiagnostics.logConnectionFailure(outcome.message)
+                    // Skip uploads this cycle; candidates remain PENDING/FAILED for retry.
+                    return RecordingSyncStats()
+                }
+            }
+        }
 
         var uploaded = 0
         var failedCount = 0
 
-        for (recording in toUpload) {
-            // Re-check connectivity each iteration; large batches can outlast a Wi-Fi connection.
+        for (recording in candidates) {
             if (!networkMonitor.isConnected()) break
             if (settingsStore.syncOnWifiOnly && !networkMonitor.isOnWifi()) break
 
@@ -121,59 +272,86 @@ class SyncRepository(
                 }
                 UploadOutcome.Unauthorized -> {
                     clearExpiredSession()
-                    return SyncResult.AuthRequired
+                    return RecordingSyncStats(
+                        uploaded = uploaded,
+                        failed = failedCount,
+                        skippedDuplicate = skippedDuplicate,
+                        authRequired = true
+                    )
                 }
             }
         }
 
-        val callLogResult = syncCallLogs(deviceId)
-        if (callLogResult.authRequired) {
-            return SyncResult.AuthRequired
-        }
-        val didWork = uploaded > 0 ||
-            failedCount > 0 ||
-            callLogResult.uploaded > 0 ||
-            callLogResult.skipped > 0 ||
-            callLogResult.failed > 0 ||
-            toUpload.isNotEmpty()
+        return RecordingSyncStats(uploaded = uploaded, failed = failedCount, skippedDuplicate = skippedDuplicate)
+    }
 
-        return if (didWork) {
-            SyncResult.Completed(
-                uploaded = uploaded,
-                failed = failedCount,
-                callLogsUploaded = callLogResult.uploaded,
-                callLogsSkipped = callLogResult.skipped,
-                callLogsFailed = callLogResult.failed,
-                callLogsError = callLogResult.errorMessage
+    private suspend fun checkExistingRecordings(
+        api: CrmApiService,
+        deviceId: String,
+        candidates: List<RecordingEntity>
+    ): ExistenceCheckOutcome {
+        val items = candidates.mapNotNull { recording ->
+            val phone = DedupKeyBuilder.normalizePhoneNumber(recording.phoneNumber) ?: return@mapNotNull null
+            val startedAt = recording.callStartedAt ?: return@mapNotNull null
+            RecordingCheckItem(
+                clientRef = recording.id.toString(),
+                phoneNumber = phone,
+                callStartedAt = startedAt.toIso8601(),
+                durationSeconds = recording.durationSeconds,
+                fileSize = recording.fileSize,
+                fileHash = recording.fileHash
             )
-        } else {
-            SyncResult.NothingToSync
         }
+        if (items.isEmpty()) return ExistenceCheckOutcome.Available(emptySet())
+
+        val existing = mutableSetOf<String>()
+        for (chunk in items.chunked(CHECK_EXISTING_BATCH_SIZE)) {
+            val response = try {
+                api.checkExistingRecordings(RecordingExistingCheckRequest(deviceId = deviceId, records = chunk))
+            } catch (io: IOException) {
+                return ExistenceCheckOutcome.Error(NetworkDiagnostics.classify(throwable = io))
+            }
+
+            if (!response.isSuccessful) {
+                when (response.code()) {
+                    404, 501 -> return ExistenceCheckOutcome.NotSupported
+                    401 -> return ExistenceCheckOutcome.Unauthorized
+                    else -> {
+                        val rawBody = runCatching { response.errorBody()?.string() }.getOrNull()
+                        val serverMessage = UploadErrorParser.extractMessage(rawBody)
+                        return ExistenceCheckOutcome.Error(
+                            NetworkDiagnostics.classify(httpCode = response.code(), serverMessage = serverMessage)
+                        )
+                    }
+                }
+            }
+
+            response.body()?.existing?.let { existing += it }
+        }
+
+        return ExistenceCheckOutcome.Available(existing)
     }
 
-    suspend fun syncCallLogsOnly(): CallLogSyncStats {
-        if (!settingsStore.isCrmConfigured() || settingsStore.dummyTestMode) return CallLogSyncStats()
-        if (!networkMonitor.isConnected()) return CallLogSyncStats()
-        if (settingsStore.syncOnWifiOnly && !networkMonitor.isOnWifi()) return CallLogSyncStats()
+    // ---------------------------------------------------------------------
+    // Call logs
+    // ---------------------------------------------------------------------
 
-        val deviceId = DeviceIdProvider.getOrCreate(context.applicationContext, settingsStore)
-        return syncCallLogs(deviceId)
-    }
-
-    private suspend fun syncCallLogs(deviceId: String): CallLogSyncStats {
+    private suspend fun syncCallLogs(api: CrmApiService?, deviceId: String): CallLogSyncStats {
         if (settingsStore.dummyTestMode || !settingsStore.isCrmConfigured() || !hasCallLogPermission()) {
             NetworkDiagnostics.logCallLogSync(
                 totalFetched = 0,
                 uploaded = 0,
                 skipped = 0,
                 failed = 0,
-                lastSyncedCallLogId = settingsStore.lastSyncedCallLogId
+                lastSyncedCallLogId = 0L
             )
             return CallLogSyncStats()
         }
 
-        val api = apiFactory.getService() ?: return CallLogSyncStats()
-        val lastSyncedId = settingsStore.lastSyncedCallLogId
+        if (api == null) return CallLogSyncStats()
+
+        val profileKey = settingsStore.activeSyncProfileKey(deviceId)
+        val lastSyncedId = settingsStore.lastSyncedCallLogId(profileKey)
         val fetched = callLogReader.loadNewerThan(lastSyncedId)
         if (fetched.isEmpty()) {
             NetworkDiagnostics.logCallLogSync(0, 0, 0, 0, lastSyncedId)
@@ -183,7 +361,46 @@ class SyncRepository(
         val uploadable = fetched.filter { it.isUploadable() }
         val skipped = fetched.size - uploadable.size
         val maxFetchedId = fetched.maxOf { it.id }
-        val payload = uploadable.map { it.toSyncItem(deviceId) }
+
+        if (uploadable.isEmpty()) {
+            settingsStore.setLastSyncedCallLogId(profileKey, maxFetchedId)
+            NetworkDiagnostics.logCallLogSync(fetched.size, 0, skipped, 0, maxFetchedId)
+            return CallLogSyncStats(skipped = skipped)
+        }
+
+        var missing = uploadable
+        var skippedDuplicate = 0
+
+        when (val outcome = checkExistingCallLogs(api, deviceId, uploadable)) {
+            is ExistenceCheckOutcome.Available -> {
+                val (existing, stillMissing) = uploadable.partition { it.id.toString() in outcome.existingRefs }
+                skippedDuplicate = existing.size
+                missing = stillMissing
+            }
+            ExistenceCheckOutcome.NotSupported -> {
+                // Endpoint not deployed yet — upload everything, as before.
+            }
+            ExistenceCheckOutcome.Unauthorized -> {
+                clearExpiredSession()
+                NetworkDiagnostics.logCallLogSync(fetched.size, 0, skipped, uploadable.size, lastSyncedId)
+                return CallLogSyncStats(skipped = skipped, failed = uploadable.size, authRequired = true)
+            }
+            is ExistenceCheckOutcome.Error -> {
+                NetworkDiagnostics.logConnectionFailure(outcome.message)
+                // Don't advance the cursor; retry this whole batch next sync.
+                return CallLogSyncStats(skipped = skipped, errorMessage = outcome.message)
+            }
+        }
+
+        if (missing.isEmpty()) {
+            // Everything in this batch is accounted for: either non-uploadable or
+            // already on the server.
+            settingsStore.setLastSyncedCallLogId(profileKey, maxFetchedId)
+            NetworkDiagnostics.logCallLogSync(fetched.size, 0, skipped, 0, maxFetchedId)
+            return CallLogSyncStats(skipped = skipped, skippedDuplicate = skippedDuplicate)
+        }
+
+        val payload = missing.map { it.toSyncItem(deviceId) }
         NetworkDiagnostics.logCallLogSyncRequest(
             totalFetched = fetched.size,
             uploadable = payload.size,
@@ -193,23 +410,17 @@ class SyncRepository(
             }
         )
 
-        if (uploadable.isEmpty()) {
-            settingsStore.lastSyncedCallLogId = maxFetchedId
-            NetworkDiagnostics.logCallLogSync(fetched.size, 0, skipped, 0, maxFetchedId)
-            return CallLogSyncStats(skipped = skipped)
-        }
-
         return try {
             val response = api.syncCallLogs(CallLogsSyncRequest(logs = payload))
 
             if (response.isSuccessful) {
-                settingsStore.lastSyncedCallLogId = maxFetchedId
+                settingsStore.setLastSyncedCallLogId(profileKey, maxFetchedId)
                 val body = response.body()
-                val uploaded = body?.uploaded ?: uploadable.size
+                val uploaded = body?.uploaded ?: missing.size
                 val serverSkipped = body?.skipped ?: 0
                 val totalSkipped = skipped + serverSkipped
                 NetworkDiagnostics.logCallLogSync(fetched.size, uploaded, totalSkipped, 0, maxFetchedId)
-                CallLogSyncStats(uploaded = uploaded, skipped = totalSkipped)
+                CallLogSyncStats(uploaded = uploaded, skipped = totalSkipped, skippedDuplicate = skippedDuplicate)
             } else {
                 val rawBody = runCatching { response.errorBody()?.string() }.getOrNull()
                 NetworkDiagnostics.logCallLogSyncResponse(response.code(), rawBody)
@@ -220,10 +431,11 @@ class SyncRepository(
 
                 if (response.code() == 401) {
                     clearExpiredSession()
-                    NetworkDiagnostics.logCallLogSync(fetched.size, 0, skipped, uploadable.size, lastSyncedId)
+                    NetworkDiagnostics.logCallLogSync(fetched.size, 0, skipped, missing.size, lastSyncedId)
                     return CallLogSyncStats(
                         skipped = skipped,
-                        failed = uploadable.size,
+                        skippedDuplicate = skippedDuplicate,
+                        failed = missing.size,
                         authRequired = true,
                         errorMessage = serverMessage
                     )
@@ -235,41 +447,59 @@ class SyncRepository(
                         payload = payload,
                         totalFetched = fetched.size,
                         alreadySkipped = skipped,
+                        skippedDuplicate = skippedDuplicate,
                         previousCursor = lastSyncedId,
                         maxFetchedId = maxFetchedId,
+                        profileKey = profileKey,
                         batchErrorMessage = serverMessage
                     )
                 }
 
-                NetworkDiagnostics.logCallLogSync(fetched.size, 0, skipped, uploadable.size, lastSyncedId)
-                CallLogSyncStats(skipped = skipped, failed = uploadable.size, errorMessage = serverMessage)
+                NetworkDiagnostics.logCallLogSync(fetched.size, 0, skipped, missing.size, lastSyncedId)
+                CallLogSyncStats(
+                    skipped = skipped,
+                    skippedDuplicate = skippedDuplicate,
+                    failed = missing.size,
+                    errorMessage = serverMessage
+                )
             }
         } catch (io: IOException) {
             val message = NetworkDiagnostics.classify(throwable = io)
             NetworkDiagnostics.logConnectionFailure(message)
-            NetworkDiagnostics.logCallLogSync(fetched.size, 0, skipped, uploadable.size, lastSyncedId)
-            CallLogSyncStats(skipped = skipped, failed = uploadable.size, errorMessage = message)
+            NetworkDiagnostics.logCallLogSync(fetched.size, 0, skipped, missing.size, lastSyncedId)
+            CallLogSyncStats(skipped = skipped, skippedDuplicate = skippedDuplicate, failed = missing.size, errorMessage = message)
         }
     }
 
+    /**
+     * On HTTP 400 from the batch endpoint, retries each item individually. The
+     * call-log cursor advances to just before the first hard-failed item (so
+     * nothing before a failure is ever skipped on the next sync), or to
+     * [maxFetchedId] if every item succeeded.
+     */
     private suspend fun syncCallLogsIndividually(
         api: CrmApiService,
         payload: List<CallLogSyncItem>,
         totalFetched: Int,
         alreadySkipped: Int,
+        skippedDuplicate: Int,
         previousCursor: Long,
         maxFetchedId: Long,
+        profileKey: String,
         batchErrorMessage: String?
     ): CallLogSyncStats {
         var uploaded = 0
         var failed = 0
         var firstError: String? = null
+        val hardFailedIds = mutableListOf<Long>()
 
         for (item in payload) {
+            val itemId = item.externalCallId.toLongOrNull()
             val response = try {
                 api.syncCallLogs(CallLogsSyncRequest(logs = listOf(item)))
             } catch (error: IOException) {
                 failed++
+                if (itemId != null) hardFailedIds += itemId
                 if (firstError == null) firstError = NetworkDiagnostics.classify(throwable = error)
                 continue
             }
@@ -293,17 +523,24 @@ class SyncRepository(
                     return CallLogSyncStats(
                         uploaded = uploaded,
                         skipped = alreadySkipped,
+                        skippedDuplicate = skippedDuplicate,
                         failed = payload.size - uploaded,
                         authRequired = true,
                         errorMessage = serverMessage
                     )
                 }
+                if (itemId != null) hardFailedIds += itemId
                 if (firstError == null) firstError = serverMessage ?: "Server rejected call log ${item.externalCallId}"
             }
         }
 
-        if (uploaded > 0) {
-            settingsStore.lastSyncedCallLogId = maxFetchedId
+        val newCursor = if (hardFailedIds.isNotEmpty()) {
+            (hardFailedIds.min() - 1).coerceAtLeast(previousCursor)
+        } else {
+            maxFetchedId
+        }
+        if (newCursor > previousCursor) {
+            settingsStore.setLastSyncedCallLogId(profileKey, newCursor)
         }
 
         NetworkDiagnostics.logCallLogSync(
@@ -311,15 +548,51 @@ class SyncRepository(
             uploaded = uploaded,
             skipped = alreadySkipped,
             failed = failed,
-            lastSyncedCallLogId = settingsStore.lastSyncedCallLogId
+            lastSyncedCallLogId = newCursor
         )
 
         return CallLogSyncStats(
             uploaded = uploaded,
             skipped = alreadySkipped,
+            skippedDuplicate = skippedDuplicate,
             failed = failed,
             errorMessage = if (failed > 0) firstError ?: batchErrorMessage else null
         )
+    }
+
+    private suspend fun checkExistingCallLogs(
+        api: CrmApiService,
+        deviceId: String,
+        uploadable: List<MobileCallLog>
+    ): ExistenceCheckOutcome {
+        val items = uploadable.map { it.toCheckItem() }
+
+        val existing = mutableSetOf<String>()
+        for (chunk in items.chunked(CHECK_EXISTING_BATCH_SIZE)) {
+            val response = try {
+                api.checkExistingCallLogs(CallLogExistingCheckRequest(deviceId = deviceId, records = chunk))
+            } catch (io: IOException) {
+                return ExistenceCheckOutcome.Error(NetworkDiagnostics.classify(throwable = io))
+            }
+
+            if (!response.isSuccessful) {
+                when (response.code()) {
+                    404, 501 -> return ExistenceCheckOutcome.NotSupported
+                    401 -> return ExistenceCheckOutcome.Unauthorized
+                    else -> {
+                        val rawBody = runCatching { response.errorBody()?.string() }.getOrNull()
+                        val serverMessage = UploadErrorParser.extractMessage(rawBody)
+                        return ExistenceCheckOutcome.Error(
+                            NetworkDiagnostics.classify(httpCode = response.code(), serverMessage = serverMessage)
+                        )
+                    }
+                }
+            }
+
+            response.body()?.existing?.let { existing += it }
+        }
+
+        return ExistenceCheckOutcome.Available(existing)
     }
 
     private fun MobileCallLog.isUploadable(): Boolean =
@@ -335,11 +608,17 @@ class SyncRepository(
             deviceId = deviceId
         )
 
-    private fun MobileCallLog.normalizedPhoneNumber(): String? {
-        val value = phoneNumber?.trim()?.takeIf { it.isNotEmpty() } ?: return null
-        if (value.lowercase() in NON_UPLOADABLE_PHONE_NUMBERS) return null
-        return value.takeIf { candidate -> candidate.any { it.isDigit() } }
-    }
+    private fun MobileCallLog.toCheckItem(): CallLogCheckItem =
+        CallLogCheckItem(
+            clientRef = id.toString(),
+            phoneNumber = normalizedPhoneNumber().orEmpty(),
+            callType = callType.apiValue(),
+            callStartedAt = startedAt.toIso8601(),
+            durationSeconds = durationSeconds
+        )
+
+    private fun MobileCallLog.normalizedPhoneNumber(): String? =
+        DedupKeyBuilder.normalizePhoneNumber(phoneNumber)
 
     private fun Long.toIso8601(): String =
         ISO_MILLIS_UTC.format(Instant.ofEpochMilli(this))
@@ -358,22 +637,15 @@ class SyncRepository(
         val ISO_MILLIS_UTC: DateTimeFormatter =
             DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'").withZone(ZoneOffset.UTC)
 
-        val NON_UPLOADABLE_PHONE_NUMBERS = setOf(
-            "-1",
-            "-2",
-            "anonymous",
-            "private",
-            "private number",
-            "restricted",
-            "unavailable",
-            "unknown"
-        )
+        /** Max records per check-existing request. */
+        private const val CHECK_EXISTING_BATCH_SIZE = 200
     }
 }
 
 data class CallLogSyncStats(
     val uploaded: Int = 0,
     val skipped: Int = 0,
+    val skippedDuplicate: Int = 0,
     val failed: Int = 0,
     val authRequired: Boolean = false,
     val errorMessage: String? = null

@@ -9,6 +9,7 @@ import androidx.lifecycle.viewModelScope
 import com.infraspine.callsync.AppContainer
 import com.infraspine.callsync.data.prefs.SecureSettingsStore
 import com.infraspine.callsync.data.repository.AuthRepository
+import com.infraspine.callsync.data.repository.SyncRepository
 import com.infraspine.callsync.domain.util.DeviceIdProvider
 import com.infraspine.callsync.sync.SyncScheduler
 import com.infraspine.callsync.ui.common.Event
@@ -29,6 +30,7 @@ class SettingsViewModel(
     private val context: Context,
     private val settingsStore: SecureSettingsStore,
     private val authRepository: AuthRepository,
+    private val syncRepository: SyncRepository,
     private val updateChecker: UpdateChecker
 ) : ViewModel() {
 
@@ -46,6 +48,16 @@ class SettingsViewModel(
 
     private val _updateResult = MutableLiveData<Event<UpdateCheckResult>>()
     val updateResult: LiveData<Event<UpdateCheckResult>> = _updateResult
+
+    private val _resetSyncHistoryDone = MutableLiveData<Event<Unit>>()
+    val resetSyncHistoryDone: LiveData<Event<Unit>> = _resetSyncHistoryDone
+
+    fun resetSyncHistory() {
+        viewModelScope.launch {
+            syncRepository.resetSyncHistory()
+            _resetSyncHistoryDone.value = Event(Unit)
+        }
+    }
 
     fun checkForUpdates() {
         if (_isCheckingForUpdate.value == true) return
@@ -103,6 +115,7 @@ class SettingsViewModel(
                 context.applicationContext,
                 container.settingsStore,
                 container.authRepository,
+                container.syncRepository,
                 container.updateChecker
             ) as T
         }
