@@ -545,10 +545,27 @@ class SyncRepository(
             }
         )
 
-        return try {
-            val response = api.syncCallLogs(CallLogsSyncRequest(logs = payload))
+        val response = try {
+            api.syncCallLogs(CallLogsSyncRequest(logs = payload))
+        } catch (io: IOException) {
+            val message = NetworkDiagnostics.classify(throwable = io)
+            NetworkDiagnostics.logConnectionFailure(message)
+            NetworkDiagnostics.logCallLogSync(
+                fetched.size,
+                0,
+                skipped,
+                missing.size,
+                queryCursor.lastSyncedAndroidCallLogId
+            )
+            return CallLogSyncStats(
+                skipped = skipped,
+                skippedDuplicate = skippedDuplicate,
+                failed = missing.size,
+                errorMessage = message
+            )
+        }
 
-            if (response.isSuccessful) {
+        return if (response.isSuccessful) {
                 val body = response.body()
                 val uploaded = body?.insertedCount ?: body?.uploaded ?: missing.size
                 val serverDuplicateCount = body?.duplicateCount ?: body?.skipped ?: 0
@@ -610,17 +627,6 @@ class SyncRepository(
                     errorMessage = serverMessage ?: requestError
                 )
             }
-        } catch (io: IOException) {
-            val message = NetworkDiagnostics.classify(throwable = io)
-            NetworkDiagnostics.logConnectionFailure(message)
-            NetworkDiagnostics.logCallLogSync(
-                fetched.size,
-                0,
-                skipped,
-                missing.size,
-                queryCursor.lastSyncedAndroidCallLogId
-            )
-            CallLogSyncStats(skipped = skipped, skippedDuplicate = skippedDuplicate, failed = missing.size, errorMessage = message)
         } finally {
             callLogSyncGate.release()
         }
