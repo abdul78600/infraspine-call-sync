@@ -101,7 +101,11 @@ class CallLogMatcher(private val context: Context) {
         CallLogPage(entries = pageEntries, nextCursor = nextCursor)
     }
 
-    private fun queryCallLog(afterCursor: CallLogPageCursor?, limit: Int): List<CallLogEntry> {
+    suspend fun loadRecentCallLog(limit: Int?): List<CallLogEntry> = withContext(Dispatchers.IO) {
+        queryCallLog(afterCursor = null, limit = limit)
+    }
+
+    private fun queryCallLog(afterCursor: CallLogPageCursor?, limit: Int?): List<CallLogEntry> {
         val entries = mutableListOf<CallLogEntry>()
         val projection = arrayOf(
             CallLog.Calls._ID,
@@ -130,16 +134,20 @@ class CallLogMatcher(private val context: Context) {
                     )
                     selection?.let { putString(android.content.ContentResolver.QUERY_ARG_SQL_SELECTION, it) }
                     selectionArgs?.let { putStringArray(android.content.ContentResolver.QUERY_ARG_SQL_SELECTION_ARGS, it) }
-                    putInt(android.content.ContentResolver.QUERY_ARG_LIMIT, limit)
+                    limit?.let { putInt(android.content.ContentResolver.QUERY_ARG_LIMIT, it) }
                 }
                 context.contentResolver.query(CallLog.Calls.CONTENT_URI, projection, args, null)
             } else {
+                val sortOrder = buildString {
+                    append("${CallLog.Calls.DATE} DESC, ${CallLog.Calls._ID} DESC")
+                    limit?.let { append(" LIMIT $it") }
+                }
                 context.contentResolver.query(
                     CallLog.Calls.CONTENT_URI,
                     projection,
                     selection,
                     selectionArgs,
-                    "${CallLog.Calls.DATE} DESC, ${CallLog.Calls._ID} DESC LIMIT $limit"
+                    sortOrder
                 )
             }
 
@@ -152,7 +160,7 @@ class CallLogMatcher(private val context: Context) {
                 var readCount = 0
 
                 while (it.moveToNext()) {
-                    if (readCount >= limit) break
+                    if (limit != null && readCount >= limit) break
                     entries += CallLogEntry(
                         id = idIdx.takeIf { idx -> idx >= 0 }?.let { idx -> it.getLong(idx) },
                         phoneNumber = numberIdx.takeIf { idx -> idx >= 0 }?.let { idx -> it.getString(idx) },

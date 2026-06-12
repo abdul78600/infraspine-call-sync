@@ -2,6 +2,7 @@ package com.infraspine.callsync.ui.callhistory
 
 import android.Manifest
 import android.os.Bundle
+import android.widget.ArrayAdapter
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -9,7 +10,6 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.viewModels
 import androidx.recyclerview.widget.LinearLayoutManager
-import androidx.recyclerview.widget.RecyclerView
 import com.google.android.material.snackbar.Snackbar
 import com.infraspine.callsync.CallSyncApplication
 import com.infraspine.callsync.R
@@ -28,6 +28,7 @@ class CallHistoryFragment : Fragment() {
     }
 
     private val adapter = CallHistoryAdapter()
+    private lateinit var limitAdapter: ArrayAdapter<String>
 
     private val callLogPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
@@ -51,25 +52,32 @@ class CallHistoryFragment : Fragment() {
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
 
-        val layoutManager = LinearLayoutManager(requireContext())
-        binding.recyclerCallHistory.layoutManager = layoutManager
+        binding.recyclerCallHistory.layoutManager = LinearLayoutManager(requireContext())
         binding.recyclerCallHistory.adapter = adapter
-        binding.recyclerCallHistory.addOnScrollListener(object : RecyclerView.OnScrollListener() {
-            override fun onScrolled(recyclerView: RecyclerView, dx: Int, dy: Int) {
-                if (dy <= 0) return
-                val totalItemCount = layoutManager.itemCount
-                val lastVisible = layoutManager.findLastVisibleItemPosition()
-                if (lastVisible >= totalItemCount - LOAD_MORE_THRESHOLD) {
-                    viewModel.loadNextPage()
-                }
-            }
-        })
-        binding.buttonLoadNextPage.setOnClickListener { viewModel.loadNextPage() }
+        setUpLimitFilter()
 
         binding.swipeRefresh.setOnRefreshListener { requestAndLoad(forceRefresh = true) }
 
         observeViewModel()
         requestAndLoad(forceRefresh = false)
+    }
+
+    override fun onResume() {
+        super.onResume()
+        requestAndLoad(forceRefresh = true)
+    }
+
+    private fun setUpLimitFilter() {
+        limitAdapter = ArrayAdapter(
+            requireContext(),
+            android.R.layout.simple_list_item_1,
+            viewModel.limitOptions.map { it.label }
+        )
+        binding.editDisplayLimit.setAdapter(limitAdapter)
+        binding.editDisplayLimit.setText(viewModel.selectedLimitLabel(), false)
+        binding.editDisplayLimit.setOnItemClickListener { _, _, position, _ ->
+            viewModel.setDisplayLimit(viewModel.limitOptions[position])
+        }
     }
 
     private fun requestAndLoad(forceRefresh: Boolean) {
@@ -88,7 +96,7 @@ class CallHistoryFragment : Fragment() {
             val empty = calls.isEmpty()
             binding.textEmptyState.visibility = if (empty) View.VISIBLE else View.GONE
             binding.recyclerCallHistory.visibility = if (empty) View.GONE else View.VISIBLE
-            binding.cardPagination.visibility = if (empty) View.GONE else View.VISIBLE
+            binding.cardHistoryFilter.visibility = View.VISIBLE
         }
 
         viewModel.isLoading.observe(viewLifecycleOwner) { loading ->
@@ -98,35 +106,15 @@ class CallHistoryFragment : Fragment() {
                 View.GONE
             }
             if (!loading) binding.swipeRefresh.isRefreshing = false
+            binding.editDisplayLimit.isEnabled = !loading
         }
 
-        viewModel.isLoadingMore.observe(viewLifecycleOwner) { loadingMore ->
-            binding.progressLoadMore.visibility = if (loadingMore) View.VISIBLE else View.GONE
-            binding.buttonLoadNextPage.isEnabled = !loadingMore
-            binding.buttonLoadNextPage.text = if (loadingMore) {
-                getString(R.string.call_history_loading_more)
+        viewModel.displayState.observe(viewLifecycleOwner) { state ->
+            binding.editDisplayLimit.setText(state.selectedLimit.label, false)
+            binding.textLoadedSummary.text = if (state.selectedLimit.limit == null) {
+                getString(R.string.call_history_showing_all, state.loadedItems)
             } else {
-                getString(R.string.call_history_load_next_page)
-            }
-        }
-
-        viewModel.paginationState.observe(viewLifecycleOwner) { state ->
-            if (state.currentPage <= 0) {
-                binding.cardPagination.visibility = View.GONE
-                return@observe
-            }
-
-            binding.cardPagination.visibility = View.VISIBLE
-            binding.textPageInfo.text = getString(
-                R.string.call_history_page_summary,
-                state.currentPage,
-                state.loadedItems
-            )
-            binding.buttonLoadNextPage.visibility = if (state.hasMore) View.VISIBLE else View.GONE
-            binding.textPageStatus.text = if (state.hasMore) {
-                getString(R.string.call_history_more_pages_available)
-            } else {
-                getString(R.string.call_history_all_pages_loaded)
+                getString(R.string.call_history_showing_latest, state.loadedItems, state.selectedLimit.label)
             }
         }
 
@@ -144,10 +132,5 @@ class CallHistoryFragment : Fragment() {
     override fun onDestroyView() {
         super.onDestroyView()
         _binding = null
-    }
-
-    companion object {
-        /** Trigger the next page fetch when the user scrolls within this many items of the end. */
-        private const val LOAD_MORE_THRESHOLD = 10
     }
 }

@@ -8,7 +8,6 @@ import androidx.lifecycle.viewModelScope
 import com.infraspine.callsync.AppContainer
 import com.infraspine.callsync.data.repository.CallHistoryRepository
 import com.infraspine.callsync.domain.model.CallHistoryEntry
-import com.infraspine.callsync.scan.CallLogPageCursor
 import com.infraspine.callsync.ui.common.Event
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
@@ -18,11 +17,27 @@ sealed class CallHistoryMessage {
     data class LoadError(val message: String) : CallHistoryMessage()
 }
 
-data class CallHistoryPaginationState(
-    val currentPage: Int = 0,
+private val CALL_HISTORY_LIMIT_OPTIONS = listOf(
+    CallHistoryLimitOption("25", 25),
+    CallHistoryLimitOption("50", 50),
+    CallHistoryLimitOption("100", 100),
+    CallHistoryLimitOption("300", 300),
+    CallHistoryLimitOption("500", 500),
+    CallHistoryLimitOption("1000", 1000),
+    CallHistoryLimitOption("All", null)
+)
+
+private val DEFAULT_CALL_HISTORY_LIMIT = CALL_HISTORY_LIMIT_OPTIONS[1]
+
+data class CallHistoryLimitOption(
+    val label: String,
+    val limit: Int?
+)
+
+data class CallHistoryDisplayState(
+    val selectedLimit: CallHistoryLimitOption = DEFAULT_CALL_HISTORY_LIMIT,
     val loadedItems: Int = 0,
-    val pageSize: Int = CallHistoryRepository.PAGE_SIZE,
-    val hasMore: Boolean = false
+    val allLoaded: Boolean = false
 )
 
 class CallHistoryViewModel(
@@ -36,68 +51,55 @@ class CallHistoryViewModel(
     private val _isLoading = MutableLiveData(false)
     val isLoading: LiveData<Boolean> = _isLoading
 
-    /** True while fetching a subsequent page (drives the small list-footer spinner). */
-    private val _isLoadingMore = MutableLiveData(false)
-    val isLoadingMore: LiveData<Boolean> = _isLoadingMore
-
-    private val _paginationState = MutableLiveData(CallHistoryPaginationState())
-    val paginationState: LiveData<CallHistoryPaginationState> = _paginationState
+    private val _displayState = MutableLiveData(CallHistoryDisplayState())
+    val displayState: LiveData<CallHistoryDisplayState> = _displayState
 
     private val _message = MutableLiveData<Event<CallHistoryMessage>>()
     val message: LiveData<Event<CallHistoryMessage>> = _message
 
     private var loaded = false
-    private var endReached = false
     private var loadJob: Job? = null
-    private var nextCursor: CallLogPageCursor? = null
 
-    /** Loads the first page once automatically; call [refresh] for pull-to-refresh. */
+    val limitOptions: List<CallHistoryLimitOption> = CALL_HISTORY_LIMIT_OPTIONS
+
     fun loadIfNeeded() {
         if (!loaded) refresh()
     }
 
     fun refresh() {
         loadJob?.cancel()
-        nextCursor = null
-        endReached = false
         loaded = false
-        _paginationState.value = CallHistoryPaginationState()
-        loadPage(cursor = null, isFirstPage = true)
+        loadCalls()
     }
 
     fun onPermissionDenied() {
         _message.value = Event(CallHistoryMessage.PermissionDenied)
     }
 
-    /** Call when the list is scrolled near the bottom to fetch the next page. */
-    fun loadNextPage() {
-        if (!loaded || endReached) return
-        if (_isLoading.value == true || _isLoadingMore.value == true) return
-
-        loadPage(cursor = nextCursor, isFirstPage = false)
+    fun setDisplayLimit(option: CallHistoryLimitOption) {
+        val current = _displayState.value?.selectedLimit
+        if (current == option) return
+        _displayState.value = (_displayState.value ?: CallHistoryDisplayState()).copy(selectedLimit = option)
+        refresh()
     }
 
-    private fun loadPage(cursor: CallLogPageCursor?, isFirstPage: Boolean) {
+    fun selectedLimitLabel(): String = (_displayState.value?.selectedLimit ?: DEFAULT_CALL_HISTORY_LIMIT).label
+
+    private fun loadCalls() {
+        if (_isLoading.value == true) return
+
+        val selectedLimit = _displayState.value?.selectedLimit ?: DEFAULT_CALL_HISTORY_LIMIT
         loadJob = viewModelScope.launch {
-            if (isFirstPage) _isLoading.value = true else _isLoadingMore.value = true
+            _isLoading.value = true
 
-            runCatching { callHistoryRepository.loadCallHistoryPage(cursor, CallHistoryRepository.PAGE_SIZE) }
-                .onSuccess { page ->
+            runCatching { callHistoryRepository.loadRecentCallHistory(selectedLimit.limit) }
+                .onSuccess { calls ->
                     loaded = true
-                    endReached = page.nextCursor == null
-                    nextCursor = page.nextCursor
-
-                    val combinedEntries = if (isFirstPage) {
-                        page.entries
-                    } else {
-                        _calls.value.orEmpty() + page.entries
-                    }
-                    _calls.value = combinedEntries
-                    _paginationState.value = CallHistoryPaginationState(
-                        currentPage = if (combinedEntries.isEmpty()) 0 else
-                            ((combinedEntries.size - 1) / CallHistoryRepository.PAGE_SIZE) + 1,
-                        loadedItems = combinedEntries.size,
-                        hasMore = page.nextCursor != null
+                    _calls.value = calls
+                    _displayState.value = CallHistoryDisplayState(
+                        selectedLimit = selectedLimit,
+                        loadedItems = calls.size,
+                        allLoaded = selectedLimit.limit == null
                     )
                 }
                 .onFailure { error ->
@@ -106,7 +108,7 @@ class CallHistoryViewModel(
                     )
                 }
 
-            if (isFirstPage) _isLoading.value = false else _isLoadingMore.value = false
+            _isLoading.value = false
         }
     }
 

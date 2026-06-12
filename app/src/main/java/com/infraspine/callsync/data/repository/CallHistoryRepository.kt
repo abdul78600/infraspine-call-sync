@@ -23,6 +23,13 @@ class CallHistoryRepository(
     private val dao: RecordingDao,
     private val callLogMatcher: CallLogMatcher
 ) {
+    suspend fun loadRecentCallHistory(limit: Int?): List<CallHistoryEntry> = withContext(Dispatchers.IO) {
+        val entries = callLogMatcher.loadRecentCallLog(limit)
+        if (entries.isEmpty()) return@withContext emptyList()
+
+        val matchedTimestamps = dao.getMatchedCallStartTimestamps().toSet()
+        entries.map { entry -> entry.toCallHistoryEntry(matchedTimestamps) }
+    }
 
     /**
      * Returns one page of the device call log (newest first), each entry flagged with
@@ -42,19 +49,21 @@ class CallHistoryRepository(
         val matchedTimestamps = dao.getMatchedCallStartTimestamps().toSet()
 
         CallHistoryPage(
-            entries = page.entries.map { entry ->
-                CallHistoryEntry(
-                    callLogId = entry.id ?: 0L,
-                    phoneNumber = entry.phoneNumber,
-                    startedAt = entry.startedAt,
-                    durationSeconds = entry.durationSeconds,
-                    callType = entry.callType,
-                    hasRecording = entry.startedAt in matchedTimestamps
-                )
-            },
+            entries = page.entries.map { entry -> entry.toCallHistoryEntry(matchedTimestamps) },
             nextCursor = page.nextCursor
         )
     }
+
+    private fun com.infraspine.callsync.domain.model.CallLogEntry.toCallHistoryEntry(
+        matchedTimestamps: Set<Long>
+    ): CallHistoryEntry = CallHistoryEntry(
+        callLogId = id ?: 0L,
+        phoneNumber = phoneNumber,
+        startedAt = startedAt,
+        durationSeconds = durationSeconds,
+        callType = callType,
+        hasRecording = startedAt in matchedTimestamps
+    )
 
     companion object {
         const val PAGE_SIZE = 25
