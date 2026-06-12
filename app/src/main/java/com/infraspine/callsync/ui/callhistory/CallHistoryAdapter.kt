@@ -59,7 +59,7 @@ class CallHistoryAdapter : ListAdapter<CallHistoryEntry, CallHistoryAdapter.View
     companion object {
         private val DIFF_CALLBACK = object : DiffUtil.ItemCallback<CallHistoryEntry>() {
             override fun areItemsTheSame(oldItem: CallHistoryEntry, newItem: CallHistoryEntry) =
-                oldItem.startedAt == newItem.startedAt && oldItem.phoneNumber == newItem.phoneNumber
+                oldItem.callLogId == newItem.callLogId
 
             override fun areContentsTheSame(oldItem: CallHistoryEntry, newItem: CallHistoryEntry) =
                 oldItem == newItem

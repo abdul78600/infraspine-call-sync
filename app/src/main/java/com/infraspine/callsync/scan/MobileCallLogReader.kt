@@ -21,7 +21,10 @@ data class MobileCallLog(
  */
 class MobileCallLogReader(private val context: Context) {
 
-    suspend fun loadNewerThan(lastSyncedCallLogId: Long): List<MobileCallLog> = withContext(Dispatchers.IO) {
+    suspend fun loadAfterCursor(
+        lastSyncedAndroidCallLogId: Long,
+        lastSyncedCallStartedAt: Long
+    ): List<MobileCallLog> = withContext(Dispatchers.IO) {
         val logs = mutableListOf<MobileCallLog>()
         val projection = arrayOf(
             CallLog.Calls._ID,
@@ -31,14 +34,29 @@ class MobileCallLogReader(private val context: Context) {
             CallLog.Calls.DURATION,
             CallLog.Calls.CACHED_NAME
         )
+        val selection = when {
+            lastSyncedAndroidCallLogId > 0L -> "${CallLog.Calls._ID} > ?"
+            lastSyncedCallStartedAt > 0L -> "${CallLog.Calls.DATE} >= ?"
+            else -> null
+        }
+        val selectionArgs = when {
+            lastSyncedAndroidCallLogId > 0L -> arrayOf(lastSyncedAndroidCallLogId.toString())
+            lastSyncedCallStartedAt > 0L -> arrayOf(lastSyncedCallStartedAt.toString())
+            else -> null
+        }
+        val sortOrder = if (lastSyncedAndroidCallLogId > 0L) {
+            "${CallLog.Calls._ID} ASC"
+        } else {
+            "${CallLog.Calls.DATE} ASC, ${CallLog.Calls._ID} ASC"
+        }
 
         runCatching {
             context.contentResolver.query(
                 CallLog.Calls.CONTENT_URI,
                 projection,
-                "${CallLog.Calls._ID} > ?",
-                arrayOf(lastSyncedCallLogId.toString()),
-                "${CallLog.Calls._ID} ASC"
+                selection,
+                selectionArgs,
+                sortOrder
             )?.use { cursor ->
                 val idIdx = cursor.getColumnIndex(CallLog.Calls._ID)
                 val numberIdx = cursor.getColumnIndex(CallLog.Calls.NUMBER)
@@ -65,4 +83,7 @@ class MobileCallLogReader(private val context: Context) {
 
         logs
     }
+
+    suspend fun loadNewerThan(lastSyncedCallLogId: Long): List<MobileCallLog> =
+        loadAfterCursor(lastSyncedAndroidCallLogId = lastSyncedCallLogId, lastSyncedCallStartedAt = 0L)
 }

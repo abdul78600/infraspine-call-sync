@@ -8,6 +8,7 @@ import androidx.lifecycle.viewModelScope
 import com.infraspine.callsync.AppContainer
 import com.infraspine.callsync.data.repository.AuthRepository
 import com.infraspine.callsync.data.repository.LoginResult
+import com.infraspine.callsync.data.repository.SyncRepository
 import com.infraspine.callsync.ui.common.Event
 import kotlinx.coroutines.launch
 
@@ -17,7 +18,8 @@ sealed class LoginUiEvent {
 }
 
 class LoginViewModel(
-    private val authRepository: AuthRepository
+    private val authRepository: AuthRepository,
+    private val syncRepository: SyncRepository
 ) : ViewModel() {
 
     private val _isLoggingIn = MutableLiveData(false)
@@ -32,6 +34,9 @@ class LoginViewModel(
         viewModelScope.launch {
             _isLoggingIn.value = true
             val result = authRepository.login(serverUrl, email, password)
+            if (result == LoginResult.Success) {
+                syncRepository.startAuthenticatedSession()
+            }
             _isLoggingIn.value = false
 
             _event.value = Event(
@@ -46,7 +51,7 @@ class LoginViewModel(
     class Factory(private val container: AppContainer) : ViewModelProvider.Factory {
         @Suppress("UNCHECKED_CAST")
         override fun <T : ViewModel> create(modelClass: Class<T>): T {
-            return LoginViewModel(container.authRepository) as T
+            return LoginViewModel(container.authRepository, container.syncRepository) as T
         }
     }
 }

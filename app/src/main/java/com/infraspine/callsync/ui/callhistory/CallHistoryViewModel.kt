@@ -8,6 +8,7 @@ import androidx.lifecycle.viewModelScope
 import com.infraspine.callsync.AppContainer
 import com.infraspine.callsync.data.repository.CallHistoryRepository
 import com.infraspine.callsync.domain.model.CallHistoryEntry
+import com.infraspine.callsync.scan.CallLogPageCursor
 import com.infraspine.callsync.ui.common.Event
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
@@ -38,6 +39,7 @@ class CallHistoryViewModel(
     private var loaded = false
     private var endReached = false
     private var loadJob: Job? = null
+    private var nextCursor: CallLogPageCursor? = null
 
     /** Loads the first page once automatically; call [refresh] for pull-to-refresh. */
     fun loadIfNeeded() {
@@ -46,8 +48,9 @@ class CallHistoryViewModel(
 
     fun refresh() {
         loadJob?.cancel()
+        nextCursor = null
         endReached = false
-        loadPage(offset = 0, isFirstPage = true)
+        loadPage(cursor = null, isFirstPage = true)
     }
 
     fun onPermissionDenied() {
@@ -59,19 +62,20 @@ class CallHistoryViewModel(
         if (!loaded || endReached) return
         if (_isLoading.value == true || _isLoadingMore.value == true) return
 
-        loadPage(offset = _calls.value?.size ?: 0, isFirstPage = false)
+        loadPage(cursor = nextCursor, isFirstPage = false)
     }
 
-    private fun loadPage(offset: Int, isFirstPage: Boolean) {
+    private fun loadPage(cursor: CallLogPageCursor?, isFirstPage: Boolean) {
         loadJob = viewModelScope.launch {
             if (isFirstPage) _isLoading.value = true else _isLoadingMore.value = true
 
-            runCatching { callHistoryRepository.loadCallHistoryPage(offset, CallHistoryRepository.PAGE_SIZE) }
+            runCatching { callHistoryRepository.loadCallHistoryPage(cursor, CallHistoryRepository.PAGE_SIZE) }
                 .onSuccess { page ->
                     loaded = true
-                    if (page.size < CallHistoryRepository.PAGE_SIZE) endReached = true
+                    endReached = page.nextCursor == null
+                    nextCursor = page.nextCursor
 
-                    _calls.value = if (isFirstPage) page else (_calls.value.orEmpty() + page)
+                    _calls.value = if (isFirstPage) page.entries else (_calls.value.orEmpty() + page.entries)
                 }
                 .onFailure { error ->
                     _message.value = Event(

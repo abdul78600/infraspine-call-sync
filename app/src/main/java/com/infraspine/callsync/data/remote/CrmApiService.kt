@@ -1,12 +1,15 @@
 package com.infraspine.callsync.data.remote
 
+import com.google.gson.JsonElement
 import okhttp3.MultipartBody
 import okhttp3.RequestBody
 import retrofit2.Response
 import retrofit2.http.Body
+import retrofit2.http.GET
 import retrofit2.http.Multipart
 import retrofit2.http.POST
 import retrofit2.http.Part
+import retrofit2.http.Query
 
 /**
  * CRM upload contract. Backend integration is pending — this interface defines the
@@ -43,6 +46,11 @@ interface CrmApiService {
     suspend fun syncCallLogs(
         @Body request: CallLogsSyncRequest
     ): Response<CallLogsSyncResponse>
+
+    @GET("api/crm/call-logs/sync-state")
+    suspend fun getCallLogSyncState(
+        @Query("deviceId") deviceId: String
+    ): Response<CallLogSyncStateResponse>
 
     /**
      * Returns which of the given call logs already exist on the server, so the
@@ -116,5 +124,16 @@ data class CallLogsSyncResponse(
     val success: Boolean? = null,
     val uploaded: Int? = null,
     val skipped: Int? = null,
+    val insertedCount: Int? = null,
+    val duplicateCount: Int? = null,
+    val latestServerCallStartedAt: JsonElement? = null,
+    val latestServerCallLogId: JsonElement? = null,
+    val message: String? = null
+)
+
+data class CallLogSyncStateResponse(
+    val latestCallStartedAt: JsonElement? = null,
+    val latestAndroidCallLogId: JsonElement? = null,
+    val totalLogs: Int? = null,
     val message: String? = null
 )

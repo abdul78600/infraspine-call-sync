@@ -11,6 +11,16 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlin.math.abs
 
+data class CallLogPageCursor(
+    val startedAt: Long,
+    val callLogId: Long
+)
+
+data class CallLogPage(
+    val entries: List<CallLogEntry>,
+    val nextCursor: CallLogPageCursor?
+)
+
 /**
  * Matches scanned recordings to call log entries by proximity of timestamps.
  *
@@ -68,36 +78,58 @@ class CallLogMatcher(private val context: Context) {
 
     /**
      * Loads a single page of the device call log, newest first, for paginated UI lists.
-     *
-     * Many OEM call-log providers silently ignore the requested OFFSET (some honor LIMIT,
-     * some ignore both) and just return the same leading rows every time, which made
-     * "load more" appear to do nothing — every page looked identical to the first.
-     * LIMIT-only queries are reliably honored across providers, so we always query rows
-     * [0, offset+limit) from the top and slice the requested window out client-side.
-     * The device call log is small enough (thousands of rows at most) that re-querying
-     * a growing prefix per page is cheap compared to the correctness this buys us.
+     * Uses a `(DATE, _ID)` cursor so later pages only read older rows instead of
+     * re-reading the full prefix on every scroll.
      */
-    suspend fun loadCallLogPage(offset: Int, limit: Int): List<CallLogEntry> = withContext(Dispatchers.IO) {
-        queryCallLog(limit = offset + limit).drop(offset).take(limit)
+    suspend fun loadCallLogPage(
+        afterCursor: CallLogPageCursor?,
+        limit: Int
+    ): CallLogPage = withContext(Dispatchers.IO) {
+        val entries = queryCallLog(afterCursor = afterCursor, limit = limit + 1)
+        val pageEntries = entries.take(limit)
+        val nextCursor = if (entries.size > limit) {
+            pageEntries.lastOrNull()?.let { entry ->
+                CallLogPageCursor(
+                    startedAt = entry.startedAt,
+                    callLogId = entry.id ?: 0L
+                )
+            }
+        } else {
+            null
+        }
+
+        CallLogPage(entries = pageEntries, nextCursor = nextCursor)
     }
 
-    private fun queryCallLog(limit: Int): List<CallLogEntry> {
+    private fun queryCallLog(afterCursor: CallLogPageCursor?, limit: Int): List<CallLogEntry> {
         val entries = mutableListOf<CallLogEntry>()
         val projection = arrayOf(
+            CallLog.Calls._ID,
             CallLog.Calls.NUMBER,
             CallLog.Calls.DATE,
             CallLog.Calls.DURATION,
             CallLog.Calls.TYPE
         )
+        val selection = afterCursor?.let {
+            "(${CallLog.Calls.DATE} < ?) OR (${CallLog.Calls.DATE} = ? AND ${CallLog.Calls._ID} < ?)"
+        }
+        val selectionArgs = afterCursor?.let {
+            arrayOf(it.startedAt.toString(), it.startedAt.toString(), it.callLogId.toString())
+        }
 
         runCatching {
             val cursor = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                 val args = Bundle().apply {
-                    putStringArray(android.content.ContentResolver.QUERY_ARG_SORT_COLUMNS, arrayOf(CallLog.Calls.DATE))
+                    putStringArray(
+                        android.content.ContentResolver.QUERY_ARG_SORT_COLUMNS,
+                        arrayOf(CallLog.Calls.DATE, CallLog.Calls._ID)
+                    )
                     putInt(
                         android.content.ContentResolver.QUERY_ARG_SORT_DIRECTION,
                         android.content.ContentResolver.QUERY_SORT_DIRECTION_DESCENDING
                     )
+                    selection?.let { putString(android.content.ContentResolver.QUERY_ARG_SQL_SELECTION, it) }
+                    selectionArgs?.let { putStringArray(android.content.ContentResolver.QUERY_ARG_SQL_SELECTION_ARGS, it) }
                     putInt(android.content.ContentResolver.QUERY_ARG_LIMIT, limit)
                 }
                 context.contentResolver.query(CallLog.Calls.CONTENT_URI, projection, args, null)
@@ -105,20 +137,24 @@ class CallLogMatcher(private val context: Context) {
                 context.contentResolver.query(
                     CallLog.Calls.CONTENT_URI,
                     projection,
-                    null,
-                    null,
-                    "${CallLog.Calls.DATE} DESC LIMIT $limit"
+                    selection,
+                    selectionArgs,
+                    "${CallLog.Calls.DATE} DESC, ${CallLog.Calls._ID} DESC LIMIT $limit"
                 )
             }
 
             cursor?.use {
+                val idIdx = it.getColumnIndex(CallLog.Calls._ID)
                 val numberIdx = it.getColumnIndex(CallLog.Calls.NUMBER)
                 val dateIdx = it.getColumnIndex(CallLog.Calls.DATE)
                 val durationIdx = it.getColumnIndex(CallLog.Calls.DURATION)
                 val typeIdx = it.getColumnIndex(CallLog.Calls.TYPE)
+                var readCount = 0
 
                 while (it.moveToNext()) {
+                    if (readCount >= limit) break
                     entries += CallLogEntry(
+                        id = idIdx.takeIf { idx -> idx >= 0 }?.let { idx -> it.getLong(idx) },
                         phoneNumber = numberIdx.takeIf { idx -> idx >= 0 }?.let { idx -> it.getString(idx) },
                         startedAt = dateIdx.takeIf { idx -> idx >= 0 }?.let { idx -> it.getLong(idx) } ?: 0L,
                         durationSeconds = durationIdx.takeIf { idx -> idx >= 0 }?.let { idx -> it.getLong(idx) } ?: 0L,
@@ -126,6 +162,7 @@ class CallLogMatcher(private val context: Context) {
                             ?.let { idx -> CallType.fromCallLogType(it.getInt(idx)) }
                             ?: CallType.UNKNOWN
                     )
+                    readCount++
                 }
             }
         }

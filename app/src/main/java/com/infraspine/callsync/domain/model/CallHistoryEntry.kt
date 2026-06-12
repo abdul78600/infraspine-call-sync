@@ -8,6 +8,7 @@ package com.infraspine.callsync.domain.model
  * calls that disconnected before the recorder could capture them).
  */
 data class CallHistoryEntry(
+    val callLogId: Long,
     val phoneNumber: String?,
     val startedAt: Long,
     val durationSeconds: Long,

@@ -28,6 +28,7 @@ class CallSyncApplication : Application() {
 
         if (container.settingsStore.hasValidSession()) {
             applicationScope.launch {
+                container.syncRepository.refreshCallLogSyncState()
                 container.syncRepository.syncCallLogsOnly()
             }
         }

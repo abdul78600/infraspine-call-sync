@@ -12,7 +12,7 @@ object SyncProfile {
 
     /**
      * Builds a stable identifier from the normalized server base URL, the
-     * logged-in user id, and the device id. The same logical profile always
+     * logged-in account identifier, and the device id. The same logical profile always
      * produces the same key.
      */
     fun keyFor(serverBaseUrl: String?, userId: String?, deviceId: String?): String {
