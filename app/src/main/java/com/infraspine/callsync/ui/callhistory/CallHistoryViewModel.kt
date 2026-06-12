@@ -18,6 +18,13 @@ sealed class CallHistoryMessage {
     data class LoadError(val message: String) : CallHistoryMessage()
 }
 
+data class CallHistoryPaginationState(
+    val currentPage: Int = 0,
+    val loadedItems: Int = 0,
+    val pageSize: Int = CallHistoryRepository.PAGE_SIZE,
+    val hasMore: Boolean = false
+)
+
 class CallHistoryViewModel(
     private val callHistoryRepository: CallHistoryRepository
 ) : ViewModel() {
@@ -32,6 +39,9 @@ class CallHistoryViewModel(
     /** True while fetching a subsequent page (drives the small list-footer spinner). */
     private val _isLoadingMore = MutableLiveData(false)
     val isLoadingMore: LiveData<Boolean> = _isLoadingMore
+
+    private val _paginationState = MutableLiveData(CallHistoryPaginationState())
+    val paginationState: LiveData<CallHistoryPaginationState> = _paginationState
 
     private val _message = MutableLiveData<Event<CallHistoryMessage>>()
     val message: LiveData<Event<CallHistoryMessage>> = _message
@@ -50,6 +60,8 @@ class CallHistoryViewModel(
         loadJob?.cancel()
         nextCursor = null
         endReached = false
+        loaded = false
+        _paginationState.value = CallHistoryPaginationState()
         loadPage(cursor = null, isFirstPage = true)
     }
 
@@ -75,7 +87,18 @@ class CallHistoryViewModel(
                     endReached = page.nextCursor == null
                     nextCursor = page.nextCursor
 
-                    _calls.value = if (isFirstPage) page.entries else (_calls.value.orEmpty() + page.entries)
+                    val combinedEntries = if (isFirstPage) {
+                        page.entries
+                    } else {
+                        _calls.value.orEmpty() + page.entries
+                    }
+                    _calls.value = combinedEntries
+                    _paginationState.value = CallHistoryPaginationState(
+                        currentPage = if (combinedEntries.isEmpty()) 0 else
+                            ((combinedEntries.size - 1) / CallHistoryRepository.PAGE_SIZE) + 1,
+                        loadedItems = combinedEntries.size,
+                        hasMore = page.nextCursor != null
+                    )
                 }
                 .onFailure { error ->
                     _message.value = Event(

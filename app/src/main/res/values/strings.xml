@@ -62,6 +62,11 @@
     <string name="call_has_recording">Recorded</string>
     <string name="call_no_recording">No recording</string>
     <string name="no_call_history_found">No call history found on this device.</string>
+    <string name="call_history_page_summary">Page %1$d - %2$d calls loaded</string>
+    <string name="call_history_more_pages_available">More pages available</string>
+    <string name="call_history_all_pages_loaded">All pages loaded</string>
+    <string name="call_history_load_next_page">Load next 25</string>
+    <string name="call_history_loading_more">Loading...</string>
 
     <!-- Settings -->
     <string name="settings_title">Settings</string>

@@ -5,6 +5,7 @@ import android.os.Build
 import android.os.Bundle
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
+import androidx.lifecycle.lifecycleScope
 import androidx.navigation.fragment.NavHostFragment
 import androidx.navigation.ui.AppBarConfiguration
 import androidx.navigation.ui.setupWithNavController
@@ -12,6 +13,7 @@ import com.infraspine.callsync.CallSyncApplication
 import com.infraspine.callsync.R
 import com.infraspine.callsync.databinding.ActivityMainBinding
 import com.infraspine.callsync.ui.common.PermissionHelper
+import kotlinx.coroutines.launch
 
 class MainActivity : AppCompatActivity() {
 
@@ -47,6 +49,17 @@ class MainActivity : AppCompatActivity() {
         binding.toolbar.setupWithNavController(navController, appBarConfiguration)
 
         requestNotificationPermissionIfNeeded()
+    }
+
+    override fun onStart() {
+        super.onStart()
+
+        val app = application as CallSyncApplication
+        if (!app.container.settingsStore.hasValidSession()) return
+
+        lifecycleScope.launch {
+            app.container.syncRepository.syncCallLogsOnAppOpen()
+        }
     }
 
     private fun requestNotificationPermissionIfNeeded() {

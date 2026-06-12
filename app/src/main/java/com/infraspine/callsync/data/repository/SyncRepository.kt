@@ -104,6 +104,9 @@ class SyncRepository(
     private val callLogReader: MobileCallLogReader,
     private val hasCallLogPermission: () -> Boolean
 ) {
+    @Volatile
+    private var lastAppOpenSyncAttemptAt: Long = 0L
+
 
     private val dummyUploader: RecordingUploader by lazy { DummyCrmUploader() }
     private val realUploader: RecordingUploader by lazy {
@@ -193,6 +196,17 @@ class SyncRepository(
             autoSyncEnabled = true,
             wifiOnly = settingsStore.syncOnWifiOnly
         )
+        refreshCallLogSyncState()
+        syncCallLogsOnly()
+    }
+
+    suspend fun syncCallLogsOnAppOpen() {
+        if (!settingsStore.hasValidSession()) return
+
+        val now = System.currentTimeMillis()
+        if (now - lastAppOpenSyncAttemptAt < APP_OPEN_SYNC_THROTTLE_MS) return
+        lastAppOpenSyncAttemptAt = now
+
         refreshCallLogSyncState()
         syncCallLogsOnly()
     }
@@ -869,6 +883,7 @@ class SyncRepository(
 
         /** Max records per check-existing request. */
         private const val CHECK_EXISTING_BATCH_SIZE = 200
+        private const val APP_OPEN_SYNC_THROTTLE_MS = 15_000L
     }
 }
 

@@ -64,6 +64,7 @@ class CallHistoryFragment : Fragment() {
                 }
             }
         })
+        binding.buttonLoadNextPage.setOnClickListener { viewModel.loadNextPage() }
 
         binding.swipeRefresh.setOnRefreshListener { requestAndLoad(forceRefresh = true) }
 
@@ -87,6 +88,7 @@ class CallHistoryFragment : Fragment() {
             val empty = calls.isEmpty()
             binding.textEmptyState.visibility = if (empty) View.VISIBLE else View.GONE
             binding.recyclerCallHistory.visibility = if (empty) View.GONE else View.VISIBLE
+            binding.cardPagination.visibility = if (empty) View.GONE else View.VISIBLE
         }
 
         viewModel.isLoading.observe(viewLifecycleOwner) { loading ->
@@ -100,6 +102,32 @@ class CallHistoryFragment : Fragment() {
 
         viewModel.isLoadingMore.observe(viewLifecycleOwner) { loadingMore ->
             binding.progressLoadMore.visibility = if (loadingMore) View.VISIBLE else View.GONE
+            binding.buttonLoadNextPage.isEnabled = !loadingMore
+            binding.buttonLoadNextPage.text = if (loadingMore) {
+                getString(R.string.call_history_loading_more)
+            } else {
+                getString(R.string.call_history_load_next_page)
+            }
+        }
+
+        viewModel.paginationState.observe(viewLifecycleOwner) { state ->
+            if (state.currentPage <= 0) {
+                binding.cardPagination.visibility = View.GONE
+                return@observe
+            }
+
+            binding.cardPagination.visibility = View.VISIBLE
+            binding.textPageInfo.text = getString(
+                R.string.call_history_page_summary,
+                state.currentPage,
+                state.loadedItems
+            )
+            binding.buttonLoadNextPage.visibility = if (state.hasMore) View.VISIBLE else View.GONE
+            binding.textPageStatus.text = if (state.hasMore) {
+                getString(R.string.call_history_more_pages_available)
+            } else {
+                getString(R.string.call_history_all_pages_loaded)
+            }
         }
 
         viewModel.message.observe(viewLifecycleOwner) { event ->
