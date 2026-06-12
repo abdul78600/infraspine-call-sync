@@ -168,9 +168,22 @@ class SyncRepository(
     }
 
     suspend fun syncCallLogsOnly(): CallLogSyncStats {
-        if (!settingsStore.isCrmConfigured() || settingsStore.dummyTestMode) return CallLogSyncStats()
-        if (!networkMonitor.isConnected()) return CallLogSyncStats()
-        if (settingsStore.syncOnWifiOnly && !networkMonitor.isOnWifi()) return CallLogSyncStats()
+        if (!settingsStore.isCrmConfigured()) {
+            NetworkDiagnostics.logCallLogSyncSkipped("CRM server URL or token missing")
+            return CallLogSyncStats()
+        }
+        if (settingsStore.dummyTestMode) {
+            NetworkDiagnostics.logCallLogSyncSkipped("dummy/test mode is enabled")
+            return CallLogSyncStats()
+        }
+        if (!networkMonitor.isConnected()) {
+            NetworkDiagnostics.logCallLogSyncSkipped("device is offline")
+            return CallLogSyncStats()
+        }
+        if (settingsStore.syncOnWifiOnly && !networkMonitor.isOnWifi()) {
+            NetworkDiagnostics.logCallLogSyncSkipped("Wi-Fi only is enabled and device is not on Wi-Fi")
+            return CallLogSyncStats()
+        }
 
         val deviceId = DeviceIdProvider.getOrCreate(context.applicationContext, settingsStore)
         return syncCallLogs(apiFactory.getService(), deviceId)
@@ -388,6 +401,13 @@ class SyncRepository(
 
     private suspend fun syncCallLogs(api: CrmApiService?, deviceId: String): CallLogSyncStats {
         if (settingsStore.dummyTestMode || !settingsStore.isCrmConfigured() || !hasCallLogPermission()) {
+            val reason = when {
+                settingsStore.dummyTestMode -> "dummy/test mode is enabled"
+                !settingsStore.isCrmConfigured() -> "CRM server URL or token missing"
+                !hasCallLogPermission() -> "READ_CALL_LOG permission denied"
+                else -> "precondition failed"
+            }
+            NetworkDiagnostics.logCallLogSyncSkipped(reason)
             NetworkDiagnostics.logCallLogSync(
                 totalFetched = 0,
                 uploaded = 0,

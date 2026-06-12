@@ -135,6 +135,10 @@ object NetworkDiagnostics {
         )
     }
 
+    fun logCallLogSyncSkipped(reason: String) {
+        Log.i(TAG, "Call log sync skipped: $reason")
+    }
+
     fun logCallLogSyncRequest(totalFetched: Int, uploadable: Int, skipped: Int, sample: String) {
         Log.d(
             TAG,

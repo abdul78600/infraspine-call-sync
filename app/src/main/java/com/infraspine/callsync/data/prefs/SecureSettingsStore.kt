@@ -82,7 +82,7 @@ class SecureSettingsStore(context: Context) {
 
     /** When true, uploads are simulated locally and never hit the network. */
     var dummyTestMode: Boolean
-        get() = prefs.getBoolean(KEY_DUMMY_MODE, true)
+        get() = prefs.getBoolean(KEY_DUMMY_MODE, false)
         set(value) = prefs.edit { putBoolean(KEY_DUMMY_MODE, value) }
 
     /**

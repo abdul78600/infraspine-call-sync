@@ -51,6 +51,7 @@ class AuthRepository(
             settingsStore.userId = body.user?.id ?: body.user?.userId ?: body.userId
             settingsStore.userName = body.user?.name ?: body.name
             settingsStore.userEmail = body.user?.email ?: body.email ?: normalizedEmail
+            settingsStore.dummyTestMode = false
 
             LoginResult.Success
         } catch (io: IOException) {
