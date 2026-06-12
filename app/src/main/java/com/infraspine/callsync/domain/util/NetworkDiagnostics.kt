@@ -147,6 +147,22 @@ object NetworkDiagnostics {
         )
     }
 
+    fun logCallLogSyncCursor(
+        localStartedAt: Long,
+        localAndroidId: Long,
+        remoteStartedAt: Long,
+        remoteAndroidId: Long,
+        effectiveStartedAt: Long,
+        effectiveAndroidId: Long
+    ) {
+        Log.d(
+            TAG,
+            "Call log cursor: localStartedAt=$localStartedAt localAndroidId=$localAndroidId " +
+                "remoteStartedAt=$remoteStartedAt remoteAndroidId=$remoteAndroidId " +
+                "effectiveStartedAt=$effectiveStartedAt effectiveAndroidId=$effectiveAndroidId"
+        )
+    }
+
     fun logCallLogSyncResponse(httpCode: Int, rawBody: String?) {
         Log.d(TAG, "Call log sync response: status=$httpCode serverErrorBody=${rawBody?.takeIf { it.isNotBlank() } ?: "<empty>"}")
     }

@@ -149,7 +149,8 @@ class SyncRepository(
             callLogResult.uploaded > 0 ||
             callLogResult.skipped > 0 ||
             callLogResult.skippedDuplicate > 0 ||
-            callLogResult.failed > 0
+            callLogResult.failed > 0 ||
+            !callLogResult.errorMessage.isNullOrBlank()
 
         return if (didWork) {
             SyncResult.Completed(
@@ -438,7 +439,16 @@ class SyncRepository(
             }
         }
 
+        val remoteState = settingsStore.callLogSyncState(profileKey)
         val queryCursor = effectiveCallLogCursor(profileKey)
+        NetworkDiagnostics.logCallLogSyncCursor(
+            localStartedAt = localCursor.lastSyncedCallStartedAt,
+            localAndroidId = localCursor.lastSyncedAndroidCallLogId,
+            remoteStartedAt = remoteState.latestCallStartedAt,
+            remoteAndroidId = remoteState.latestAndroidCallLogId,
+            effectiveStartedAt = queryCursor.lastSyncedCallStartedAt,
+            effectiveAndroidId = queryCursor.lastSyncedAndroidCallLogId
+        )
         val fetched = callLogReader.loadAfterCursor(
             lastSyncedAndroidCallLogId = queryCursor.lastSyncedAndroidCallLogId,
             lastSyncedCallStartedAt = queryCursor.lastSyncedCallStartedAt
