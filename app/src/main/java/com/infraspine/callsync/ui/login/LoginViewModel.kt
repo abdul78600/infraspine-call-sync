@@ -34,9 +34,6 @@ class LoginViewModel(
         viewModelScope.launch {
             _isLoggingIn.value = true
             val result = authRepository.login(serverUrl, email, password)
-            if (result == LoginResult.Success) {
-                syncRepository.startAuthenticatedSession()
-            }
             _isLoggingIn.value = false
 
             _event.value = Event(
@@ -45,6 +42,10 @@ class LoginViewModel(
                     is LoginResult.Failure -> LoginUiEvent.Error(result.message)
                 }
             )
+
+            if (result == LoginResult.Success) {
+                syncRepository.startAuthenticatedSessionInBackground()
+            }
         }
     }
 

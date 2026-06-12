@@ -34,6 +34,7 @@ class DashboardFragment : Fragment() {
     ) { granted ->
         if (!granted) {
             Snackbar.make(binding.root, R.string.error_call_log_permission, Snackbar.LENGTH_LONG).show()
+            return@registerForActivityResult
         }
         viewModel.scanNow()
     }
@@ -43,6 +44,7 @@ class DashboardFragment : Fragment() {
     ) { granted ->
         if (!granted) {
             Snackbar.make(binding.root, R.string.error_call_log_permission, Snackbar.LENGTH_LONG).show()
+            return@registerForActivityResult
         }
         viewModel.syncNow()
     }

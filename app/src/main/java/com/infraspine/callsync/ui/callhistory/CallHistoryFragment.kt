@@ -34,6 +34,7 @@ class CallHistoryFragment : Fragment() {
 
     private val adapter = CallHistoryAdapter()
     private lateinit var limitAdapter: ArrayAdapter<String>
+    private var hasCompletedFirstResume = false
 
     private val callLogPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
@@ -66,12 +67,12 @@ class CallHistoryFragment : Fragment() {
         binding.swipeRefresh.setOnRefreshListener { requestAndLoad(forceRefresh = true) }
 
         observeViewModel()
-        requestAndLoad(forceRefresh = false)
     }
 
     override fun onResume() {
         super.onResume()
-        requestAndLoad(forceRefresh = true)
+        requestAndLoad(forceRefresh = hasCompletedFirstResume)
+        hasCompletedFirstResume = true
     }
 
     private fun setUpLimitFilter() {

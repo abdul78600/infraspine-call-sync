@@ -1,5 +1,6 @@
 package com.infraspine.callsync.ui.dashboard
 
+import android.os.SystemClock
 import androidx.lifecycle.LiveData
 import androidx.lifecycle.MediatorLiveData
 import androidx.lifecycle.MutableLiveData
@@ -52,6 +53,7 @@ class DashboardViewModel(
     private val recordingRepository: RecordingRepository,
     private val syncRepository: SyncRepository
 ) : ViewModel() {
+    private var lastManualSyncAtMs: Long = 0L
 
     private val _isScanning = MutableLiveData(false)
     val isScanning: LiveData<Boolean> = _isScanning
@@ -101,6 +103,9 @@ class DashboardViewModel(
 
     fun syncNow() {
         if (_isSyncing.value == true) return
+        val now = SystemClock.elapsedRealtime()
+        if (now - lastManualSyncAtMs < MANUAL_SYNC_DEBOUNCE_MS) return
+        lastManualSyncAtMs = now
         viewModelScope.launch {
             _isSyncing.value = true
             val result = syncRepository.syncPending()
@@ -136,5 +141,9 @@ class DashboardViewModel(
                 container.syncRepository
             ) as T
         }
+    }
+
+    companion object {
+        private const val MANUAL_SYNC_DEBOUNCE_MS = 3_000L
     }
 }
