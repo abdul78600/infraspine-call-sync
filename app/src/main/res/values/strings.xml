@@ -75,7 +75,7 @@
     <string name="crm_server_url">CRM Server URL</string>
     <string name="crm_server_url_hint">https://your-crm.example.com</string>
     <string name="device_id">Device ID</string>
-    <string name="sync_wifi_only">Sync only on Wi-Fi</string>
+    <string name="sync_wifi_only">Upload recordings only on Wi-Fi</string>
     <string name="auto_sync">Auto sync</string>
     <string name="call_log_initial_sync_mode_title">New server call-log sync</string>
     <string name="call_log_initial_sync_mode_summary">Choose what happens when this device connects to a server with no call-log checkpoint yet.</string>

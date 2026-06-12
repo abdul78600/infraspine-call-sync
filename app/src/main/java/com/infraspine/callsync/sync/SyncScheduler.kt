@@ -28,7 +28,7 @@ object SyncScheduler {
         }
 
         val constraints = Constraints.Builder()
-            .setRequiredNetworkType(if (wifiOnly) NetworkType.UNMETERED else NetworkType.CONNECTED)
+            .setRequiredNetworkType(NetworkType.CONNECTED)
             .build()
 
         val request = PeriodicWorkRequestBuilder<AutoSyncWorker>(INTERVAL_MINUTES, TimeUnit.MINUTES)

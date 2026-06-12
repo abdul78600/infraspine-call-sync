@@ -131,10 +131,6 @@ class SyncRepository(
             return SyncResult.NetworkUnavailable
         }
 
-        if (settingsStore.syncOnWifiOnly && !networkMonitor.isOnWifi()) {
-            return SyncResult.WifiRequired
-        }
-
         val deviceId = DeviceIdProvider.getOrCreate(context.applicationContext, settingsStore)
         val uploader = if (settingsStore.dummyTestMode) dummyUploader else realUploader
         val api = apiFactory.getService()
@@ -169,6 +165,8 @@ class SyncRepository(
                 callLogsFailed = callLogResult.failed,
                 callLogsError = callLogResult.errorMessage
             )
+        } else if (recordingResult.wifiBlocked) {
+            SyncResult.WifiRequired
         } else {
             SyncResult.NothingToSync
         }
@@ -187,11 +185,6 @@ class SyncRepository(
             NetworkDiagnostics.logCallLogSyncSkipped("device is offline")
             return CallLogSyncStats()
         }
-        if (settingsStore.syncOnWifiOnly && !networkMonitor.isOnWifi()) {
-            NetworkDiagnostics.logCallLogSyncSkipped("Wi-Fi only is enabled and device is not on Wi-Fi")
-            return CallLogSyncStats()
-        }
-
         val deviceId = DeviceIdProvider.getOrCreate(context.applicationContext, settingsStore)
         return syncCallLogs(apiFactory.getService(), deviceId)
     }
@@ -268,7 +261,8 @@ class SyncRepository(
         val uploaded: Int = 0,
         val failed: Int = 0,
         val skippedDuplicate: Int = 0,
-        val authRequired: Boolean = false
+        val authRequired: Boolean = false,
+        val wifiBlocked: Boolean = false
     )
 
     private suspend fun syncRecordings(
@@ -280,6 +274,9 @@ class SyncRepository(
         val failed = dao.getByStatus(SyncStatus.FAILED)
         var candidates = pending + failed
         if (candidates.isEmpty()) return RecordingSyncStats()
+        if (settingsStore.syncOnWifiOnly && !networkMonitor.isOnWifi()) {
+            return RecordingSyncStats(wifiBlocked = true)
+        }
 
         var skippedDuplicate = 0
 
