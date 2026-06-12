@@ -52,6 +52,11 @@ interface CrmApiService {
         @Query("deviceId") deviceId: String
     ): Response<CallLogSyncStateResponse>
 
+    @GET("api/crm/call-logs/sync/status")
+    suspend fun getCallLogSyncStatus(
+        @Query("deviceId") deviceId: String
+    ): Response<CallLogSyncStatusResponse>
+
     /**
      * Returns which of the given call logs already exist on the server, so the
      * app can skip re-uploading them. A 404/501 response means the backend
@@ -135,5 +140,14 @@ data class CallLogSyncStateResponse(
     val latestCallStartedAt: JsonElement? = null,
     val latestAndroidCallLogId: JsonElement? = null,
     val totalLogs: Int? = null,
+    val message: String? = null
+)
+
+data class CallLogSyncStatusResponse(
+    val latestExternalCallId: JsonElement? = null,
+    val latestCallStartedAt: JsonElement? = null,
+    val latestSyncedAt: JsonElement? = null,
+    val totalLogs: Int? = null,
+    val instanceId: String? = null,
     val message: String? = null
 )

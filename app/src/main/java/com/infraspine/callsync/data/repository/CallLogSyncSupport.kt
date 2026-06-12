@@ -3,7 +3,9 @@ package com.infraspine.callsync.data.repository
 import com.google.gson.JsonElement
 import com.google.gson.JsonPrimitive
 import com.infraspine.callsync.data.prefs.CallLogSyncCursor
+import com.infraspine.callsync.data.prefs.CallLogSyncStateSnapshot
 import com.infraspine.callsync.data.remote.CallLogsSyncResponse
+import com.infraspine.callsync.domain.sync.CallLogInitialSyncMode
 import com.infraspine.callsync.scan.MobileCallLog
 import java.time.Instant
 import java.util.concurrent.atomic.AtomicBoolean
@@ -21,6 +23,12 @@ internal class SingleFlightCallLogSyncGate {
 internal data class CallLogSyncSuccessCounts(
     val uploaded: Int,
     val duplicateCount: Int
+)
+
+internal data class CallLogCursorDecision(
+    val queryCursor: CallLogSyncCursor,
+    val seededCursor: CallLogSyncCursor? = null,
+    val skippedFullHistory: Boolean = false
 )
 
 internal object CallLogSyncSupport {
@@ -63,6 +71,63 @@ internal object CallLogSyncSupport {
 
     fun shouldStopBatchSync(httpCode: Int): Boolean =
         httpCode == 400 || httpCode == 429
+
+    fun effectiveCursor(
+        local: CallLogSyncCursor,
+        remote: CallLogSyncStateSnapshot,
+        resetRequested: Boolean,
+        initialSyncMode: CallLogInitialSyncMode,
+        latestLocalLog: MobileCallLog?,
+        syncedAt: Long
+    ): CallLogCursorDecision {
+        if (resetRequested) {
+            return CallLogCursorDecision(queryCursor = local)
+        }
+
+        if (remote.isEmpty() && local.isEmpty() && initialSyncMode == CallLogInitialSyncMode.FROM_NOW) {
+            val seededCursor = latestLocalLog?.let {
+                CallLogSyncCursor(
+                    lastSyncedCallStartedAt = it.startedAt,
+                    lastSyncedAndroidCallLogId = it.id,
+                    lastCallLogSyncAt = syncedAt
+                )
+            } ?: local
+            return CallLogCursorDecision(
+                queryCursor = seededCursor,
+                seededCursor = seededCursor.takeIf { !it.isEmpty() },
+                skippedFullHistory = seededCursor != local && !seededCursor.isEmpty()
+            )
+        }
+
+        if (remote.isEmpty()) {
+            return CallLogCursorDecision(queryCursor = local)
+        }
+        if (local.isEmpty()) {
+            return CallLogCursorDecision(
+                queryCursor = CallLogSyncCursor(
+                    lastSyncedCallStartedAt = remote.latestCallStartedAt,
+                    lastSyncedAndroidCallLogId = remote.latestAndroidCallLogId,
+                    lastCallLogSyncAt = local.lastCallLogSyncAt
+                )
+            )
+        }
+
+        return if (
+            remote.latestAndroidCallLogId > local.lastSyncedAndroidCallLogId ||
+            (remote.latestAndroidCallLogId == local.lastSyncedAndroidCallLogId &&
+                remote.latestCallStartedAt > local.lastSyncedCallStartedAt)
+        ) {
+            CallLogCursorDecision(
+                queryCursor = CallLogSyncCursor(
+                    lastSyncedCallStartedAt = remote.latestCallStartedAt,
+                    lastSyncedAndroidCallLogId = remote.latestAndroidCallLogId,
+                    lastCallLogSyncAt = local.lastCallLogSyncAt
+                )
+            )
+        } else {
+            CallLogCursorDecision(queryCursor = local)
+        }
+    }
 }
 
 private fun JsonElement?.toEpochMillisOrZero(): Long {

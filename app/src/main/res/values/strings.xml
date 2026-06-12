@@ -77,6 +77,12 @@
     <string name="device_id">Device ID</string>
     <string name="sync_wifi_only">Sync only on Wi-Fi</string>
     <string name="auto_sync">Auto sync</string>
+    <string name="call_log_initial_sync_mode_title">New server call-log sync</string>
+    <string name="call_log_initial_sync_mode_summary">Choose what happens when this device connects to a server with no call-log checkpoint yet.</string>
+    <string name="call_log_sync_from_now">Sync from now</string>
+    <string name="call_log_upload_full_history">Upload full history</string>
+    <string name="call_log_upload_full_history_confirm_title">Upload full call history?</string>
+    <string name="call_log_upload_full_history_confirm_message">This can upload older call logs to a server that does not have a checkpoint yet. Continue only if you want the full device history sent.</string>
     <string name="dummy_test_mode">Use dummy/test upload mode</string>
     <string name="dummy_test_mode_summary">Simulates uploads locally without contacting the CRM server. Useful until CRM API is ready.</string>
     <string name="save_settings">Save Settings</string>

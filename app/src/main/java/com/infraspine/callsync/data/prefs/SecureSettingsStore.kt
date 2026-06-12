@@ -5,6 +5,7 @@ import android.content.SharedPreferences
 import androidx.security.crypto.EncryptedSharedPreferences
 import androidx.security.crypto.MasterKey
 import androidx.core.content.edit
+import com.infraspine.callsync.domain.sync.CallLogInitialSyncMode
 import com.infraspine.callsync.domain.sync.SyncProfile
 
 data class CallLogSyncCursor(
@@ -16,9 +17,12 @@ data class CallLogSyncCursor(
 }
 
 data class CallLogSyncStateSnapshot(
+    val latestExternalCallId: String? = null,
     val latestCallStartedAt: Long = 0L,
     val latestAndroidCallLogId: Long = 0L,
-    val totalLogs: Int = 0
+    val latestSyncedAt: Long = 0L,
+    val totalLogs: Int = 0,
+    val serverInstanceId: String? = null
 ) {
     fun isEmpty(): Boolean = latestCallStartedAt <= 0L && latestAndroidCallLogId <= 0L && totalLogs <= 0
 }
@@ -85,13 +89,39 @@ class SecureSettingsStore(context: Context) {
         get() = prefs.getBoolean(KEY_DUMMY_MODE, false)
         set(value) = prefs.edit { putBoolean(KEY_DUMMY_MODE, value) }
 
+    var callLogInitialSyncMode: CallLogInitialSyncMode
+        get() = CallLogInitialSyncMode.fromPersisted(prefs.getString(KEY_CALL_LOG_INITIAL_SYNC_MODE, null))
+        set(value) = prefs.edit { putString(KEY_CALL_LOG_INITIAL_SYNC_MODE, value.persistedValue) }
+
+    fun resolvedServerIdentity(serverBaseUrl: String? = crmServerUrl, serverInstanceId: String? = null): String {
+        val normalizedUrl = SyncProfile.normalizeUrl(serverBaseUrl)
+        val effectiveInstanceId = serverInstanceId
+            ?.trim()
+            ?.takeIf { it.isNotBlank() }
+            ?: prefs.getString(serverInstanceIdKey(normalizedUrl), null)?.takeIf { it.isNotBlank() }
+        return SyncProfile.serverIdentity(serverBaseUrl, effectiveInstanceId)
+    }
+
+    fun bindServerInstanceId(serverBaseUrl: String?, serverInstanceId: String?) {
+        val normalizedUrl = SyncProfile.normalizeUrl(serverBaseUrl)
+        if (normalizedUrl.isBlank()) return
+        val normalizedInstanceId = serverInstanceId?.trim()?.takeIf { it.isNotBlank() } ?: return
+        prefs.edit {
+            putString(serverInstanceIdKey(normalizedUrl), normalizedInstanceId)
+        }
+    }
+
     /**
      * The active sync profile key for (crmServerUrl, userId, deviceId). Cursors and
      * "reset sync history" are scoped to this key so different servers/accounts/devices
      * never share sync state.
      */
-    fun activeSyncProfileKey(deviceId: String): String =
-        SyncProfile.keyFor(crmServerUrl, userId ?: userEmail ?: userName, deviceId)
+    fun activeSyncProfileKey(deviceId: String, serverInstanceId: String? = null): String =
+        SyncProfile.keyFor(
+            resolvedServerIdentity(serverBaseUrl = crmServerUrl, serverInstanceId = serverInstanceId),
+            userId ?: userEmail ?: userName,
+            deviceId
+        )
 
     /**
      * Per-profile call-log cursor used for incremental sync. Falls back to the
@@ -136,24 +166,51 @@ class SecureSettingsStore(context: Context) {
 
     fun callLogSyncState(profileKey: String): CallLogSyncStateSnapshot =
         CallLogSyncStateSnapshot(
+            latestExternalCallId = prefs.getString(callLogSyncStateExternalIdKey(profileKey), null),
             latestCallStartedAt = prefs.getLong(callLogSyncStateStartedAtKey(profileKey), 0L),
             latestAndroidCallLogId = prefs.getLong(callLogSyncStateIdKey(profileKey), 0L),
-            totalLogs = prefs.getInt(callLogSyncStateTotalLogsKey(profileKey), 0)
+            latestSyncedAt = prefs.getLong(callLogSyncStateSyncedAtKey(profileKey), 0L),
+            totalLogs = prefs.getInt(callLogSyncStateTotalLogsKey(profileKey), 0),
+            serverInstanceId = prefs.getString(callLogSyncStateInstanceIdKey(profileKey), null)
         )
 
     fun setCallLogSyncState(profileKey: String, state: CallLogSyncStateSnapshot) {
         prefs.edit {
+            putString(callLogSyncStateExternalIdKey(profileKey), state.latestExternalCallId)
             putLong(callLogSyncStateStartedAtKey(profileKey), state.latestCallStartedAt)
             putLong(callLogSyncStateIdKey(profileKey), state.latestAndroidCallLogId)
+            putLong(callLogSyncStateSyncedAtKey(profileKey), state.latestSyncedAt)
             putInt(callLogSyncStateTotalLogsKey(profileKey), state.totalLogs)
+            putString(callLogSyncStateInstanceIdKey(profileKey), state.serverInstanceId)
         }
     }
 
     fun clearCallLogSyncState(profileKey: String) {
         prefs.edit {
+            remove(callLogSyncStateExternalIdKey(profileKey))
             remove(callLogSyncStateStartedAtKey(profileKey))
             remove(callLogSyncStateIdKey(profileKey))
+            remove(callLogSyncStateSyncedAtKey(profileKey))
             remove(callLogSyncStateTotalLogsKey(profileKey))
+            remove(callLogSyncStateInstanceIdKey(profileKey))
+        }
+    }
+
+    fun migrateCallLogProfileState(fromProfileKey: String, toProfileKey: String) {
+        if (fromProfileKey == toProfileKey) return
+        if (!callLogCursor(toProfileKey).isEmpty() || !callLogSyncState(toProfileKey).isEmpty()) return
+
+        val fromCursor = callLogCursor(fromProfileKey)
+        val fromState = callLogSyncState(fromProfileKey)
+        val fromResetRequested = isCallLogResetRequested(fromProfileKey)
+        if (!fromCursor.isEmpty()) {
+            setCallLogCursor(toProfileKey, fromCursor)
+        }
+        if (!fromState.isEmpty()) {
+            setCallLogSyncState(toProfileKey, fromState)
+        }
+        if (fromResetRequested) {
+            setCallLogResetRequested(toProfileKey, true)
         }
     }
 
@@ -183,10 +240,14 @@ class SecureSettingsStore(context: Context) {
     private fun callLogCursorStartedAtKey(profileKey: String) = "$KEY_LAST_SYNCED_CALL_STARTED_AT_PREFIX$profileKey"
     private fun callLogCursorIdKey(profileKey: String) = "$KEY_LAST_SYNCED_CALL_LOG_ID_PREFIX$profileKey"
     private fun callLogCursorSyncAtKey(profileKey: String) = "$KEY_LAST_CALL_LOG_SYNC_AT_PREFIX$profileKey"
+    private fun callLogSyncStateExternalIdKey(profileKey: String) = "$KEY_SERVER_EXTERNAL_CALL_ID_PREFIX$profileKey"
     private fun callLogSyncStateStartedAtKey(profileKey: String) = "$KEY_SERVER_CALL_STARTED_AT_PREFIX$profileKey"
     private fun callLogSyncStateIdKey(profileKey: String) = "$KEY_SERVER_CALL_LOG_ID_PREFIX$profileKey"
+    private fun callLogSyncStateSyncedAtKey(profileKey: String) = "$KEY_SERVER_SYNCED_AT_PREFIX$profileKey"
     private fun callLogSyncStateTotalLogsKey(profileKey: String) = "$KEY_SERVER_TOTAL_LOGS_PREFIX$profileKey"
+    private fun callLogSyncStateInstanceIdKey(profileKey: String) = "$KEY_SERVER_INSTANCE_ID_STATE_PREFIX$profileKey"
     private fun callLogResetRequestedKey(profileKey: String) = "$KEY_CALL_LOG_RESET_REQUESTED_PREFIX$profileKey"
+    private fun serverInstanceIdKey(normalizedUrl: String) = "$KEY_SERVER_INSTANCE_ID_PREFIX$normalizedUrl"
 
     fun isCrmConfigured(): Boolean =
         !crmServerUrl.isNullOrBlank() && !accessToken.isNullOrBlank()
@@ -215,15 +276,20 @@ class SecureSettingsStore(context: Context) {
         private const val KEY_WIFI_ONLY = "sync_wifi_only"
         private const val KEY_AUTO_SYNC = "auto_sync_enabled"
         private const val KEY_DUMMY_MODE = "dummy_test_mode"
+        private const val KEY_CALL_LOG_INITIAL_SYNC_MODE = "call_log_initial_sync_mode"
 
         /** Legacy global cursor, kept only as a one-time seed source for per-profile cursors. */
         private const val KEY_LAST_SYNCED_CALL_LOG_ID = "last_synced_call_log_id"
         private const val KEY_LAST_SYNCED_CALL_STARTED_AT_PREFIX = "last_synced_call_started_at_"
         private const val KEY_LAST_SYNCED_CALL_LOG_ID_PREFIX = "last_synced_call_log_id_"
         private const val KEY_LAST_CALL_LOG_SYNC_AT_PREFIX = "last_call_log_sync_at_"
+        private const val KEY_SERVER_EXTERNAL_CALL_ID_PREFIX = "server_external_call_id_"
         private const val KEY_SERVER_CALL_STARTED_AT_PREFIX = "server_call_started_at_"
         private const val KEY_SERVER_CALL_LOG_ID_PREFIX = "server_call_log_id_"
+        private const val KEY_SERVER_SYNCED_AT_PREFIX = "server_synced_at_"
         private const val KEY_SERVER_TOTAL_LOGS_PREFIX = "server_total_logs_"
+        private const val KEY_SERVER_INSTANCE_ID_PREFIX = "server_instance_id_"
+        private const val KEY_SERVER_INSTANCE_ID_STATE_PREFIX = "server_instance_id_state_"
         private const val KEY_CALL_LOG_RESET_REQUESTED_PREFIX = "call_log_reset_requested_"
     }
 }

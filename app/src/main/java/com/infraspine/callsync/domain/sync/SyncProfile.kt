@@ -15,14 +15,22 @@ object SyncProfile {
      * logged-in account identifier, and the device id. The same logical profile always
      * produces the same key.
      */
-    fun keyFor(serverBaseUrl: String?, userId: String?, deviceId: String?): String {
-        val normalizedUrl = normalizeUrl(serverBaseUrl)
-        val raw = "$normalizedUrl|${userId.orEmpty()}|${deviceId.orEmpty()}"
+    fun keyFor(serverIdentity: String?, userId: String?, deviceId: String?): String {
+        val raw = "${serverIdentity.orEmpty()}|${userId.orEmpty()}|${deviceId.orEmpty()}"
         return sha256Hex(raw)
     }
 
+    fun serverIdentity(serverBaseUrl: String?, instanceId: String?): String {
+        val normalizedInstanceId = instanceId?.trim()?.takeIf { it.isNotBlank() }
+        return if (normalizedInstanceId != null) {
+            "instance:${normalizedInstanceId.lowercase()}"
+        } else {
+            "url:${normalizeUrl(serverBaseUrl)}"
+        }
+    }
+
     /** Mirrors CrmApiFactory's base-URL normalization (trailing slash) plus lowercasing. */
-    private fun normalizeUrl(url: String?): String {
+    fun normalizeUrl(url: String?): String {
         val trimmed = url?.trim()?.takeIf { it.isNotBlank() } ?: return ""
         val withSlash = if (trimmed.endsWith("/")) trimmed else "$trimmed/"
         return withSlash.lowercase()

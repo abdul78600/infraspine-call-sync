@@ -10,6 +10,7 @@ import com.infraspine.callsync.AppContainer
 import com.infraspine.callsync.data.prefs.SecureSettingsStore
 import com.infraspine.callsync.data.repository.AuthRepository
 import com.infraspine.callsync.data.repository.SyncRepository
+import com.infraspine.callsync.domain.sync.CallLogInitialSyncMode
 import com.infraspine.callsync.domain.util.DeviceIdProvider
 import com.infraspine.callsync.sync.SyncScheduler
 import com.infraspine.callsync.ui.common.Event
@@ -23,7 +24,8 @@ data class SettingsUiState(
     val deviceId: String,
     val syncOnWifiOnly: Boolean,
     val autoSyncEnabled: Boolean,
-    val dummyTestMode: Boolean
+    val dummyTestMode: Boolean,
+    val callLogInitialSyncMode: CallLogInitialSyncMode
 )
 
 class SettingsViewModel(
@@ -79,20 +81,23 @@ class SettingsViewModel(
         deviceId = DeviceIdProvider.getOrCreate(context, settingsStore),
         syncOnWifiOnly = settingsStore.syncOnWifiOnly,
         autoSyncEnabled = settingsStore.autoSyncEnabled,
-        dummyTestMode = settingsStore.dummyTestMode
+        dummyTestMode = settingsStore.dummyTestMode,
+        callLogInitialSyncMode = settingsStore.callLogInitialSyncMode
     )
 
     fun save(
         crmServerUrl: String,
         syncOnWifiOnly: Boolean,
         autoSyncEnabled: Boolean,
-        dummyTestMode: Boolean
+        dummyTestMode: Boolean,
+        callLogInitialSyncMode: CallLogInitialSyncMode
     ) {
         settingsStore.crmServerUrl = crmServerUrl.trim().takeIf { it.isNotBlank() }
         settingsStore.syncOnWifiOnly = syncOnWifiOnly
         val shouldAutoSync = autoSyncEnabled && settingsStore.hasValidSession()
         settingsStore.autoSyncEnabled = shouldAutoSync
         settingsStore.dummyTestMode = dummyTestMode
+        settingsStore.callLogInitialSyncMode = callLogInitialSyncMode
 
         SyncScheduler.apply(context, shouldAutoSync, syncOnWifiOnly)
 

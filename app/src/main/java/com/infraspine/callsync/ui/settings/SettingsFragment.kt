@@ -16,6 +16,7 @@ import com.google.android.material.snackbar.Snackbar
 import com.infraspine.callsync.CallSyncApplication
 import com.infraspine.callsync.R
 import com.infraspine.callsync.databinding.FragmentSettingsBinding
+import com.infraspine.callsync.domain.sync.CallLogInitialSyncMode
 import com.infraspine.callsync.update.UpdateCheckResult
 
 class SettingsFragment : Fragment() {
@@ -84,6 +85,10 @@ class SettingsFragment : Fragment() {
             binding.switchWifiOnly.isChecked = state.syncOnWifiOnly
             binding.switchAutoSync.isChecked = state.autoSyncEnabled
             binding.switchDummyMode.isChecked = state.dummyTestMode
+            when (state.callLogInitialSyncMode) {
+                CallLogInitialSyncMode.FROM_NOW -> binding.radioSyncFromNow.isChecked = true
+                CallLogInitialSyncMode.FULL_HISTORY -> binding.radioUploadFullHistory.isChecked = true
+            }
         }
 
         viewModel.saved.observe(viewLifecycleOwner) { saved ->
@@ -162,11 +167,34 @@ class SettingsFragment : Fragment() {
     }
 
     private fun saveSettings() {
+        val selectedMode = when (binding.radioGroupInitialSync.checkedRadioButtonId) {
+            R.id.radioUploadFullHistory -> CallLogInitialSyncMode.FULL_HISTORY
+            else -> CallLogInitialSyncMode.FROM_NOW
+        }
+        if (selectedMode == CallLogInitialSyncMode.FULL_HISTORY &&
+            viewModel.uiState.value?.callLogInitialSyncMode != CallLogInitialSyncMode.FULL_HISTORY
+        ) {
+            MaterialAlertDialogBuilder(requireContext())
+                .setTitle(R.string.call_log_upload_full_history_confirm_title)
+                .setMessage(R.string.call_log_upload_full_history_confirm_message)
+                .setPositiveButton(R.string.call_log_upload_full_history) { _, _ ->
+                    persistSettings(selectedMode)
+                }
+                .setNegativeButton(android.R.string.cancel, null)
+                .show()
+            return
+        }
+
+        persistSettings(selectedMode)
+    }
+
+    private fun persistSettings(callLogInitialSyncMode: CallLogInitialSyncMode) {
         viewModel.save(
             crmServerUrl = binding.editCrmUrl.text?.toString().orEmpty(),
             syncOnWifiOnly = binding.switchWifiOnly.isChecked,
             autoSyncEnabled = binding.switchAutoSync.isChecked,
-            dummyTestMode = binding.switchDummyMode.isChecked
+            dummyTestMode = binding.switchDummyMode.isChecked,
+            callLogInitialSyncMode = callLogInitialSyncMode
         )
     }
 

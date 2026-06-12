@@ -1,6 +1,7 @@
 package com.infraspine.callsync.data.remote
 
 import com.infraspine.callsync.data.prefs.SecureSettingsStore
+import com.infraspine.callsync.domain.sync.SyncProfile
 import com.infraspine.callsync.domain.util.NetworkDiagnostics
 import okhttp3.Interceptor
 import okhttp3.OkHttpClient
@@ -30,7 +31,7 @@ class CrmApiFactory(private val settingsStore: SecureSettingsStore) {
      */
     fun getService(): CrmApiService? {
         val baseUrl = settingsStore.crmServerUrl?.takeIf { it.isNotBlank() } ?: return null
-        val normalized = if (baseUrl.endsWith("/")) baseUrl else "$baseUrl/"
+        val normalized = SyncProfile.normalizeUrl(baseUrl)
 
         cachedService?.let { if (cachedBaseUrl == normalized) return it }
 

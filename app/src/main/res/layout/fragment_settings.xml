@@ -107,6 +107,42 @@
             android:layout_marginTop="@dimen/spacing_sm"
             android:text="@string/auto_sync" />
 
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="@dimen/spacing_md"
+            android:text="@string/call_log_initial_sync_mode_title"
+            android:textColor="@color/text_primary"
+            android:textSize="14sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="@dimen/spacing_xs"
+            android:text="@string/call_log_initial_sync_mode_summary"
+            android:textColor="@color/text_secondary"
+            android:textSize="12sp" />
+
+        <RadioGroup
+            android:id="@+id/radioGroupInitialSync"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="@dimen/spacing_sm">
+
+            <com.google.android.material.radiobutton.MaterialRadioButton
+                android:id="@+id/radioSyncFromNow"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/call_log_sync_from_now" />
+
+            <com.google.android.material.radiobutton.MaterialRadioButton
+                android:id="@+id/radioUploadFullHistory"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/call_log_upload_full_history" />
+        </RadioGroup>
+
         <View
             android:layout_width="match_parent"
             android:layout_height="1dp"

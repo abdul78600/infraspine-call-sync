@@ -1,11 +1,15 @@
 package com.infraspine.callsync.data.repository
 
 import com.google.gson.JsonPrimitive
+import com.infraspine.callsync.data.prefs.CallLogSyncCursor
+import com.infraspine.callsync.data.prefs.CallLogSyncStateSnapshot
 import com.infraspine.callsync.data.remote.CallLogsSyncResponse
+import com.infraspine.callsync.domain.sync.CallLogInitialSyncMode
 import com.infraspine.callsync.domain.model.CallType
 import com.infraspine.callsync.scan.MobileCallLog
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -60,6 +64,60 @@ class CallLogSyncSupportTest {
         gate.release()
 
         assertTrue(gate.tryAcquire())
+    }
+
+    @Test
+    fun effectiveCursorSeedsFromLatestLocalLogWhenServerIsNew() {
+        val decision = CallLogSyncSupport.effectiveCursor(
+            local = CallLogSyncCursor(),
+            remote = CallLogSyncStateSnapshot(),
+            resetRequested = false,
+            initialSyncMode = CallLogInitialSyncMode.FROM_NOW,
+            latestLocalLog = mobileCallLog(id = 500L, startedAt = 2_000L),
+            syncedAt = 333L
+        )
+
+        assertEquals(500L, decision.queryCursor.lastSyncedAndroidCallLogId)
+        assertEquals(2_000L, decision.queryCursor.lastSyncedCallStartedAt)
+        assertEquals(333L, decision.queryCursor.lastCallLogSyncAt)
+        assertTrue(decision.skippedFullHistory)
+    }
+
+    @Test
+    fun effectiveCursorDoesNotSeedWhenFullHistoryIsEnabled() {
+        val decision = CallLogSyncSupport.effectiveCursor(
+            local = CallLogSyncCursor(),
+            remote = CallLogSyncStateSnapshot(),
+            resetRequested = false,
+            initialSyncMode = CallLogInitialSyncMode.FULL_HISTORY,
+            latestLocalLog = mobileCallLog(id = 500L, startedAt = 2_000L),
+            syncedAt = 333L
+        )
+
+        assertTrue(decision.queryCursor.isEmpty())
+        assertNull(decision.seededCursor)
+        assertFalse(decision.skippedFullHistory)
+    }
+
+    @Test
+    fun effectiveCursorUsesRemoteCheckpointWhenAvailable() {
+        val decision = CallLogSyncSupport.effectiveCursor(
+            local = CallLogSyncCursor(),
+            remote = CallLogSyncStateSnapshot(
+                latestExternalCallId = "88",
+                latestCallStartedAt = 4_000L,
+                latestAndroidCallLogId = 88L,
+                totalLogs = 10
+            ),
+            resetRequested = false,
+            initialSyncMode = CallLogInitialSyncMode.FROM_NOW,
+            latestLocalLog = mobileCallLog(id = 500L, startedAt = 2_000L),
+            syncedAt = 333L
+        )
+
+        assertEquals(88L, decision.queryCursor.lastSyncedAndroidCallLogId)
+        assertEquals(4_000L, decision.queryCursor.lastSyncedCallStartedAt)
+        assertFalse(decision.skippedFullHistory)
     }
 
     private fun mobileCallLog(
