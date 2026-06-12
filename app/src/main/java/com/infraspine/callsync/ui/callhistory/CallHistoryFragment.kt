@@ -10,11 +10,16 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.viewModels
 import androidx.recyclerview.widget.LinearLayoutManager
+import com.google.android.material.datepicker.MaterialDatePicker
 import com.google.android.material.snackbar.Snackbar
 import com.infraspine.callsync.CallSyncApplication
 import com.infraspine.callsync.R
 import com.infraspine.callsync.databinding.FragmentCallHistoryBinding
 import com.infraspine.callsync.ui.common.PermissionHelper
+import java.time.Instant
+import java.time.ZoneId
+import java.time.ZoneOffset
+import java.time.format.DateTimeFormatter
 
 class CallHistoryFragment : Fragment() {
 
@@ -55,6 +60,8 @@ class CallHistoryFragment : Fragment() {
         binding.recyclerCallHistory.layoutManager = LinearLayoutManager(requireContext())
         binding.recyclerCallHistory.adapter = adapter
         setUpLimitFilter()
+        binding.buttonSelectDateRange.setOnClickListener { showDateRangePicker() }
+        binding.buttonClearDateRange.setOnClickListener { viewModel.clearDateRange() }
 
         binding.swipeRefresh.setOnRefreshListener { requestAndLoad(forceRefresh = true) }
 
@@ -78,6 +85,23 @@ class CallHistoryFragment : Fragment() {
         binding.editDisplayLimit.setOnItemClickListener { _, _, position, _ ->
             viewModel.setDisplayLimit(viewModel.limitOptions[position])
         }
+    }
+
+    private fun showDateRangePicker() {
+        val picker = MaterialDatePicker.Builder.dateRangePicker()
+            .setTitleText(R.string.call_history_select_date_range)
+            .build()
+        picker.addOnPositiveButtonClickListener { selection ->
+            val startUtc = selection.first ?: return@addOnPositiveButtonClickListener
+            val endUtc = selection.second ?: return@addOnPositiveButtonClickListener
+            viewModel.setDateRange(
+                CallHistorySelectedDateRange(
+                    startAtInclusive = utcPickerDayToLocalStartMillis(startUtc),
+                    endAtInclusive = utcPickerDayToLocalEndMillis(endUtc)
+                )
+            )
+        }
+        picker.show(parentFragmentManager, "call_history_date_range")
     }
 
     private fun requestAndLoad(forceRefresh: Boolean) {
@@ -116,6 +140,14 @@ class CallHistoryFragment : Fragment() {
             } else {
                 getString(R.string.call_history_showing_latest, state.loadedItems, state.selectedLimit.label)
             }
+            binding.textDateRangeSummary.text = state.selectedDateRange?.let {
+                getString(
+                    R.string.call_history_date_range_value,
+                    DISPLAY_DATE.format(Instant.ofEpochMilli(it.startAtInclusive).atZone(ZoneId.systemDefault()).toLocalDate()),
+                    DISPLAY_DATE.format(Instant.ofEpochMilli(it.endAtInclusive).atZone(ZoneId.systemDefault()).toLocalDate())
+                )
+            } ?: getString(R.string.call_history_date_range_any)
+            binding.buttonClearDateRange.visibility = if (state.selectedDateRange == null) View.GONE else View.VISIBLE
         }
 
         viewModel.message.observe(viewLifecycleOwner) { event ->
@@ -132,5 +164,19 @@ class CallHistoryFragment : Fragment() {
     override fun onDestroyView() {
         super.onDestroyView()
         _binding = null
+    }
+
+    private fun utcPickerDayToLocalStartMillis(utcMillis: Long): Long {
+        val localDate = Instant.ofEpochMilli(utcMillis).atZone(ZoneOffset.UTC).toLocalDate()
+        return localDate.atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
+    }
+
+    private fun utcPickerDayToLocalEndMillis(utcMillis: Long): Long {
+        val localDate = Instant.ofEpochMilli(utcMillis).atZone(ZoneOffset.UTC).toLocalDate()
+        return localDate.plusDays(1).atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli() - 1L
+    }
+
+    companion object {
+        private val DISPLAY_DATE: DateTimeFormatter = DateTimeFormatter.ofPattern("dd MMM yyyy")
     }
 }

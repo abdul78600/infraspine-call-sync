@@ -1,8 +1,6 @@
 package com.infraspine.callsync.scan
 
 import android.content.Context
-import android.os.Build
-import android.os.Bundle
 import android.provider.CallLog
 import com.infraspine.callsync.domain.model.CallLogEntry
 import com.infraspine.callsync.domain.model.CallMatchResult
@@ -14,6 +12,11 @@ import kotlin.math.abs
 data class CallLogPageCursor(
     val startedAt: Long,
     val callLogId: Long
+)
+
+data class CallLogDateRange(
+    val startAtInclusive: Long,
+    val endAtInclusive: Long
 )
 
 data class CallLogPage(
@@ -101,11 +104,15 @@ class CallLogMatcher(private val context: Context) {
         CallLogPage(entries = pageEntries, nextCursor = nextCursor)
     }
 
-    suspend fun loadRecentCallLog(limit: Int?): List<CallLogEntry> = withContext(Dispatchers.IO) {
-        queryCallLog(afterCursor = null, limit = limit)
+    suspend fun loadRecentCallLog(limit: Int?, dateRange: CallLogDateRange? = null): List<CallLogEntry> = withContext(Dispatchers.IO) {
+        queryCallLog(afterCursor = null, limit = limit, dateRange = dateRange)
     }
 
-    private fun queryCallLog(afterCursor: CallLogPageCursor?, limit: Int?): List<CallLogEntry> {
+    private fun queryCallLog(
+        afterCursor: CallLogPageCursor?,
+        limit: Int?,
+        dateRange: CallLogDateRange? = null
+    ): List<CallLogEntry> {
         val entries = mutableListOf<CallLogEntry>()
         val projection = arrayOf(
             CallLog.Calls._ID,
@@ -114,42 +121,32 @@ class CallLogMatcher(private val context: Context) {
             CallLog.Calls.DURATION,
             CallLog.Calls.TYPE
         )
-        val selection = afterCursor?.let {
-            "(${CallLog.Calls.DATE} < ?) OR (${CallLog.Calls.DATE} = ? AND ${CallLog.Calls._ID} < ?)"
+        val selectionParts = mutableListOf<String>()
+        val selectionArgs = mutableListOf<String>()
+
+        afterCursor?.let {
+            selectionParts += "((${CallLog.Calls.DATE} < ?) OR (${CallLog.Calls.DATE} = ? AND ${CallLog.Calls._ID} < ?))"
+            selectionArgs += it.startedAt.toString()
+            selectionArgs += it.startedAt.toString()
+            selectionArgs += it.callLogId.toString()
         }
-        val selectionArgs = afterCursor?.let {
-            arrayOf(it.startedAt.toString(), it.startedAt.toString(), it.callLogId.toString())
+        dateRange?.let {
+            selectionParts += "${CallLog.Calls.DATE} >= ?"
+            selectionArgs += it.startAtInclusive.toString()
+            selectionParts += "${CallLog.Calls.DATE} <= ?"
+            selectionArgs += it.endAtInclusive.toString()
         }
+        val selection = selectionParts.takeIf { it.isNotEmpty() }?.joinToString(" AND ")
+        val selectionArgArray = selectionArgs.takeIf { it.isNotEmpty() }?.toTypedArray()
 
         runCatching {
-            val cursor = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                val args = Bundle().apply {
-                    putStringArray(
-                        android.content.ContentResolver.QUERY_ARG_SORT_COLUMNS,
-                        arrayOf(CallLog.Calls.DATE, CallLog.Calls._ID)
-                    )
-                    putInt(
-                        android.content.ContentResolver.QUERY_ARG_SORT_DIRECTION,
-                        android.content.ContentResolver.QUERY_SORT_DIRECTION_DESCENDING
-                    )
-                    selection?.let { putString(android.content.ContentResolver.QUERY_ARG_SQL_SELECTION, it) }
-                    selectionArgs?.let { putStringArray(android.content.ContentResolver.QUERY_ARG_SQL_SELECTION_ARGS, it) }
-                    limit?.let { putInt(android.content.ContentResolver.QUERY_ARG_LIMIT, it) }
-                }
-                context.contentResolver.query(CallLog.Calls.CONTENT_URI, projection, args, null)
-            } else {
-                val sortOrder = buildString {
-                    append("${CallLog.Calls.DATE} DESC, ${CallLog.Calls._ID} DESC")
-                    limit?.let { append(" LIMIT $it") }
-                }
-                context.contentResolver.query(
-                    CallLog.Calls.CONTENT_URI,
-                    projection,
-                    selection,
-                    selectionArgs,
-                    sortOrder
-                )
-            }
+            val cursor = context.contentResolver.query(
+                CallLog.Calls.CONTENT_URI,
+                projection,
+                selection,
+                selectionArgArray,
+                "${CallLog.Calls.DATE} DESC, ${CallLog.Calls._ID} DESC"
+            )
 
             cursor?.use {
                 val idIdx = it.getColumnIndex(CallLog.Calls._ID)
@@ -157,10 +154,8 @@ class CallLogMatcher(private val context: Context) {
                 val dateIdx = it.getColumnIndex(CallLog.Calls.DATE)
                 val durationIdx = it.getColumnIndex(CallLog.Calls.DURATION)
                 val typeIdx = it.getColumnIndex(CallLog.Calls.TYPE)
-                var readCount = 0
 
                 while (it.moveToNext()) {
-                    if (limit != null && readCount >= limit) break
                     entries += CallLogEntry(
                         id = idIdx.takeIf { idx -> idx >= 0 }?.let { idx -> it.getLong(idx) },
                         phoneNumber = numberIdx.takeIf { idx -> idx >= 0 }?.let { idx -> it.getString(idx) },
@@ -170,12 +165,16 @@ class CallLogMatcher(private val context: Context) {
                             ?.let { idx -> CallType.fromCallLogType(it.getInt(idx)) }
                             ?: CallType.UNKNOWN
                     )
-                    readCount++
                 }
             }
         }
 
         return entries
+            .sortedWith(
+                compareByDescending<CallLogEntry> { it.startedAt }
+                    .thenByDescending { it.id ?: 0L }
+            )
+            .let { sorted -> limit?.let { sorted.take(it) } ?: sorted }
     }
 
     /**

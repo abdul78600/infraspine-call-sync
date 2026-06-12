@@ -2,6 +2,7 @@ package com.infraspine.callsync.data.repository
 
 import com.infraspine.callsync.data.local.dao.RecordingDao
 import com.infraspine.callsync.domain.model.CallHistoryEntry
+import com.infraspine.callsync.scan.CallLogDateRange
 import com.infraspine.callsync.scan.CallLogMatcher
 import com.infraspine.callsync.scan.CallLogPageCursor
 import kotlinx.coroutines.Dispatchers
@@ -23,8 +24,11 @@ class CallHistoryRepository(
     private val dao: RecordingDao,
     private val callLogMatcher: CallLogMatcher
 ) {
-    suspend fun loadRecentCallHistory(limit: Int?): List<CallHistoryEntry> = withContext(Dispatchers.IO) {
-        val entries = callLogMatcher.loadRecentCallLog(limit)
+    suspend fun loadRecentCallHistory(
+        limit: Int?,
+        dateRange: CallLogDateRange? = null
+    ): List<CallHistoryEntry> = withContext(Dispatchers.IO) {
+        val entries = callLogMatcher.loadRecentCallLog(limit, dateRange)
         if (entries.isEmpty()) return@withContext emptyList()
 
         val matchedTimestamps = dao.getMatchedCallStartTimestamps().toSet()

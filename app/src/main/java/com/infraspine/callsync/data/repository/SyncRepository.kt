@@ -781,13 +781,14 @@ class SyncRepository(
         response: com.infraspine.callsync.data.remote.CallLogsSyncResponse?,
         fallbackLog: MobileCallLog
     ): CallLogSyncCursor? {
-        val responseId = response?.latestServerCallLogId.toLongOrZero()
         val responseStartedAt = response?.latestServerCallStartedAt.toEpochMillisOrZero()
-        if (responseId <= 0L && responseStartedAt <= 0L) return null
+        if (responseStartedAt <= 0L) return null
 
         return CallLogSyncCursor(
-            lastSyncedCallStartedAt = if (responseStartedAt > 0L) responseStartedAt else fallbackLog.startedAt,
-            lastSyncedAndroidCallLogId = if (responseId > 0L) responseId else fallbackLog.id,
+            lastSyncedCallStartedAt = responseStartedAt,
+            // Server-side row ids are not Android CallLog._ID values. Always advance the
+            // local device cursor using the highest Android call-log id we actually sent.
+            lastSyncedAndroidCallLogId = fallbackLog.id,
             lastCallLogSyncAt = System.currentTimeMillis()
         )
     }
