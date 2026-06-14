@@ -151,17 +151,20 @@ object NetworkDiagnostics {
         totalRecords: Int,
         chunkIndex: Int,
         chunkSize: Int,
-        sample: String
+        wrapperKey: String,
+        deviceIdPresent: Boolean,
+        firstItemJson: String
     ) {
         Log.d(
             TAG,
             "Call log check-existing request: totalRecords=$totalRecords chunkIndex=$chunkIndex " +
-                "chunkSize=$chunkSize sample=$sample"
+                "chunkSize=$chunkSize wrapperKey=$wrapperKey deviceIdPresent=$deviceIdPresent " +
+                "firstItem=$firstItemJson"
         )
     }
 
     fun logCallLogCheckExistingResponse(httpCode: Int, rawBody: String?) {
-        Log.d(
+        Log.e(
             TAG,
             "Call log check-existing response: status=$httpCode " +
                 "serverErrorBody=${rawBody?.takeIf { it.isNotBlank() } ?: "<empty>"}"

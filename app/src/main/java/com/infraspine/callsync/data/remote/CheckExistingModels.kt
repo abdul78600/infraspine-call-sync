@@ -17,14 +17,13 @@ data class CallLogExistingCheckRequest(
 
 data class CallLogCheckItem(
     /** Local CallLog `_ID`, as a string, echoed back by the server. */
-    val externalCallId: String,
+    val clientRef: String,
     val phoneNumber: String,
     /** Lowercase: incoming | outgoing | missed | rejected | blocked */
     val callType: String,
     /** ISO-8601 UTC, e.g. "2026-06-08T12:30:00.000Z" */
     val callStartedAt: String,
-    val durationSeconds: Long,
-    val deviceId: String
+    val durationSeconds: Long
 )
 
 data class CallLogExistingCheckResponse(

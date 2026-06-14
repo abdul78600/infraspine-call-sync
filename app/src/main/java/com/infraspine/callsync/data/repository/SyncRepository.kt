@@ -1,6 +1,7 @@
 package com.infraspine.callsync.data.repository
 
 import android.content.Context
+import com.google.gson.Gson
 import com.google.gson.JsonElement
 import com.google.gson.JsonPrimitive
 import com.infraspine.callsync.data.prefs.CallLogSyncCursor
@@ -64,7 +65,10 @@ sealed class SyncResult {
  */
 private sealed class ExistenceCheckOutcome {
     /** [existingRefs] are the `clientRef`s the server already has. */
-    data class Available(val existingRefs: Set<String>) : ExistenceCheckOutcome()
+    data class Available(
+        val existingRefs: Set<String>,
+        val missingRefs: Set<String>? = null
+    ) : ExistenceCheckOutcome()
     /** Endpoint not deployed yet (404/501) — treat all candidates as missing. */
     object NotSupported : ExistenceCheckOutcome()
     object Unauthorized : ExistenceCheckOutcome()
@@ -560,7 +564,13 @@ class SyncRepository(
 
             when (val outcome = checkExistingCallLogs(api, deviceId, uploadable)) {
                 is ExistenceCheckOutcome.Available -> {
-                    val (existing, stillMissing) = uploadable.partition { it.id.toString() in outcome.existingRefs }
+                    val missingRefs = outcome.missingRefs
+                        ?: return CallLogSyncStats(
+                            skipped = skipped,
+                            errorMessage = "Call log check-existing response did not identify missing records"
+                        )
+                    val existing = uploadable.filter { it.id.toString() in outcome.existingRefs }
+                    val stillMissing = uploadable.filter { it.id.toString() in missingRefs }
                     skippedDuplicate = existing.size
                     missing = stillMissing
                 }
@@ -709,21 +719,23 @@ class SyncRepository(
         deviceId: String,
         uploadable: List<MobileCallLog>
     ): ExistenceCheckOutcome {
-        val items = uploadable.map { it.toCheckItem(deviceId) }
+        val items = uploadable.map { it.toCheckItem() }
         val chunks = items.chunked(CHECK_EXISTING_BATCH_SIZE)
 
         val existing = mutableSetOf<String>()
+        val missing = mutableSetOf<String>()
         for ((chunkIndex, chunk) in chunks.withIndex()) {
+            val request = CallLogExistingCheckRequest(deviceId = deviceId, records = chunk)
             NetworkDiagnostics.logCallLogCheckExistingRequest(
                 totalRecords = items.size,
                 chunkIndex = chunkIndex + 1,
                 chunkSize = chunk.size,
-                sample = chunk.take(3).joinToString(prefix = "[", postfix = "]") {
-                    "{externalCallId=${it.externalCallId}, type=${it.callType}, startedAt=${it.callStartedAt}, hasPhone=${it.phoneNumber.isNotBlank()}}"
-                }
+                wrapperKey = "records",
+                deviceIdPresent = deviceId.isNotBlank(),
+                firstItemJson = chunk.firstOrNull()?.let { GSON.toJson(it) } ?: "<empty>"
             )
             val response = try {
-                api.checkExistingCallLogs(CallLogExistingCheckRequest(deviceId = deviceId, records = chunk))
+                api.checkExistingCallLogs(request)
             } catch (io: IOException) {
                 return ExistenceCheckOutcome.Error(NetworkDiagnostics.classify(throwable = io))
             }
@@ -746,10 +758,21 @@ class SyncRepository(
                 }
             }
 
-            response.body()?.existing?.let { existing += it }
+            val body = response.body()
+            body?.existing?.let { existing += it }
+            body?.missing?.let { missing += it }
+
+            val chunkRefs = chunk.mapTo(mutableSetOf()) { it.clientRef }
+            val accountedRefs = (body?.existing.orEmpty() + body?.missing.orEmpty()).toSet()
+            val unaccountedRefs = chunkRefs - accountedRefs
+            if (unaccountedRefs.isNotEmpty()) {
+                return ExistenceCheckOutcome.Error(
+                    "Call log check-existing response omitted ${unaccountedRefs.size} records in chunk ${chunkIndex + 1}/${chunks.size}"
+                )
+            }
         }
 
-        return ExistenceCheckOutcome.Available(existing)
+        return ExistenceCheckOutcome.Available(existingRefs = existing, missingRefs = missing)
     }
 
     private suspend fun fetchCallLogSyncState(
@@ -876,14 +899,13 @@ class SyncRepository(
             deviceId = deviceId
         )
 
-    private fun MobileCallLog.toCheckItem(deviceId: String): CallLogCheckItem =
+    private fun MobileCallLog.toCheckItem(): CallLogCheckItem =
         CallLogCheckItem(
-            externalCallId = id.toString(),
+            clientRef = id.toString(),
             phoneNumber = normalizedPhoneNumber().orEmpty(),
             callType = callType.apiValue(),
             callStartedAt = startedAt.toIso8601(),
-            durationSeconds = durationSeconds,
-            deviceId = deviceId
+            durationSeconds = durationSeconds
         )
 
     private fun MobileCallLog.normalizedPhoneNumber(): String? =
@@ -939,6 +961,7 @@ class SyncRepository(
         private const val APP_OPEN_SYNC_THROTTLE_MS = 15_000L
         private const val CALL_LOG_RECOVERY_WINDOW_MS = 7L * 24L * 60L * 60L * 1000L
         private const val CALL_LOG_RECOVERY_INTERVAL_MS = 24L * 60L * 60L * 1000L
+        private val GSON = Gson()
     }
 }
 
