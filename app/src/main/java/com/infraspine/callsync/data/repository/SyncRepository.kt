@@ -82,6 +82,12 @@ private sealed class SyncStateOutcome {
     data class Error(val message: String) : SyncStateOutcome()
 }
 
+private enum class CallLogSkipReason {
+    UNKNOWN_CALL_TYPE,
+    MISSING_STARTED_AT,
+    INVALID_PHONE_NUMBER
+}
+
 /**
  * Drives the "Sync Now" flow.
  *
@@ -537,8 +543,16 @@ class SyncRepository(
                 return CallLogSyncStats()
             }
 
-            val uploadable = fetched.filter { it.isUploadable() }
-            val skipped = fetched.size - uploadable.size
+            val filteredLogs = filterUploadableCallLogs(fetched)
+            val uploadable = filteredLogs.uploadable
+            val skipped = filteredLogs.skippedCount
+            if (filteredLogs.skippedCount > 0) {
+                NetworkDiagnostics.logCallLogSkipReasons(
+                    totalFetched = fetched.size,
+                    skipped = filteredLogs.skippedCount,
+                    summary = filteredLogs.reasonSummary()
+                )
+            }
 
             if (uploadable.isEmpty()) {
                 persistCallLogCursorAfterSuccessfulPass(
@@ -859,6 +873,29 @@ class SyncRepository(
         settingsStore.setCallLogResetRequested(profileKey, false)
     }
 
+    private fun filterUploadableCallLogs(logs: List<MobileCallLog>): FilteredCallLogs {
+        val uploadable = mutableListOf<MobileCallLog>()
+        val skippedReasons = linkedMapOf(
+            CallLogSkipReason.UNKNOWN_CALL_TYPE to 0,
+            CallLogSkipReason.MISSING_STARTED_AT to 0,
+            CallLogSkipReason.INVALID_PHONE_NUMBER to 0
+        )
+
+        for (log in logs) {
+            val skipReason = log.skipReason()
+            if (skipReason == null) {
+                uploadable += log
+            } else {
+                skippedReasons[skipReason] = (skippedReasons[skipReason] ?: 0) + 1
+            }
+        }
+
+        return FilteredCallLogs(
+            uploadable = uploadable,
+            skippedReasons = skippedReasons.filterValues { it > 0 }
+        )
+    }
+
     private fun persistCallLogCursorAfterSuccessfulPass(
         profileKey: String,
         localCursor: CallLogSyncCursor,
@@ -886,8 +923,13 @@ class SyncRepository(
             lastCallLogSyncAt = syncedAt
         )
 
-    private fun MobileCallLog.isUploadable(): Boolean =
-        callType != CallType.UNKNOWN && startedAt > 0L && normalizedPhoneNumber() != null
+    private fun MobileCallLog.skipReason(): CallLogSkipReason? =
+        when {
+            callType == CallType.UNKNOWN -> CallLogSkipReason.UNKNOWN_CALL_TYPE
+            startedAt <= 0L -> CallLogSkipReason.MISSING_STARTED_AT
+            normalizedPhoneNumber() == null -> CallLogSkipReason.INVALID_PHONE_NUMBER
+            else -> null
+        }
 
     private fun MobileCallLog.toSyncItem(deviceId: String): CallLogSyncItem =
         CallLogSyncItem(
@@ -910,6 +952,19 @@ class SyncRepository(
 
     private fun MobileCallLog.normalizedPhoneNumber(): String? =
         DedupKeyBuilder.normalizePhoneNumber(phoneNumber)
+
+    private data class FilteredCallLogs(
+        val uploadable: List<MobileCallLog>,
+        val skippedReasons: Map<CallLogSkipReason, Int>
+    ) {
+        val skippedCount: Int
+            get() = skippedReasons.values.sum()
+
+        fun reasonSummary(): String =
+            skippedReasons.entries.joinToString(", ") { (reason, count) ->
+                "${reason.name.lowercase()}:$count"
+            }
+    }
 
     private fun Long.toIso8601(): String =
         ISO_MILLIS_UTC.format(Instant.ofEpochMilli(this))

@@ -147,6 +147,13 @@ object NetworkDiagnostics {
         )
     }
 
+    fun logCallLogSkipReasons(totalFetched: Int, skipped: Int, summary: String) {
+        Log.i(
+            TAG,
+            "Call log local skips: totalFetched=$totalFetched skipped=$skipped reasons=$summary"
+        )
+    }
+
     fun logCallLogCheckExistingRequest(
         totalRecords: Int,
         chunkIndex: Int,
