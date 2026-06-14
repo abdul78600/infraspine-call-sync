@@ -11,6 +11,7 @@ import androidx.lifecycle.viewModelScope
 import com.infraspine.callsync.AppContainer
 import com.infraspine.callsync.data.repository.RecordingRepository
 import com.infraspine.callsync.data.repository.ScanResult
+import com.infraspine.callsync.data.repository.CallLogSyncTrigger
 import com.infraspine.callsync.data.repository.SyncRepository
 import com.infraspine.callsync.data.repository.SyncResult
 import com.infraspine.callsync.domain.model.SyncStatus
@@ -108,7 +109,7 @@ class DashboardViewModel(
         lastManualSyncAtMs = now
         viewModelScope.launch {
             _isSyncing.value = true
-            val result = syncRepository.syncPending()
+            val result = syncRepository.syncPending(CallLogSyncTrigger.MANUAL)
             _isSyncing.value = false
 
             _message.value = Event(

@@ -20,6 +20,13 @@ internal class SingleFlightCallLogSyncGate {
     }
 }
 
+internal enum class CallLogSyncTrigger {
+    MANUAL,
+    LOGIN,
+    APP_OPEN,
+    PERIODIC
+}
+
 internal data class CallLogSyncSuccessCounts(
     val uploaded: Int,
     val duplicateCount: Int
@@ -71,6 +78,36 @@ internal object CallLogSyncSupport {
 
     fun shouldStopBatchSync(httpCode: Int): Boolean =
         httpCode == 400 || httpCode == 429
+
+    fun shouldRunRecovery(
+        trigger: CallLogSyncTrigger,
+        lastRecoveryAt: Long,
+        now: Long,
+        recoveryIntervalMs: Long
+    ): Boolean =
+        when (trigger) {
+            CallLogSyncTrigger.MANUAL,
+            CallLogSyncTrigger.LOGIN,
+            CallLogSyncTrigger.APP_OPEN -> true
+
+            CallLogSyncTrigger.PERIODIC ->
+                lastRecoveryAt <= 0L || now - lastRecoveryAt >= recoveryIntervalMs
+        }
+
+    fun mergeFetchedLogs(
+        cursorFetched: List<MobileCallLog>,
+        recoveryFetched: List<MobileCallLog>
+    ): List<MobileCallLog> {
+        if (recoveryFetched.isEmpty()) return cursorFetched
+        if (cursorFetched.isEmpty()) {
+            return recoveryFetched.sortedWith(compareBy<MobileCallLog> { it.startedAt }.thenBy { it.id })
+        }
+
+        val merged = LinkedHashMap<Long, MobileCallLog>(cursorFetched.size + recoveryFetched.size)
+        for (log in cursorFetched) merged[log.id] = log
+        for (log in recoveryFetched) merged[log.id] = log
+        return merged.values.sortedWith(compareBy<MobileCallLog> { it.startedAt }.thenBy { it.id })
+    }
 
     fun effectiveCursor(
         local: CallLogSyncCursor,

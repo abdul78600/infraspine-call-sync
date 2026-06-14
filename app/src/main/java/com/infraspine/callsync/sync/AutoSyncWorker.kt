@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
 import com.infraspine.callsync.CallSyncApplication
+import com.infraspine.callsync.data.repository.CallLogSyncTrigger
 import com.infraspine.callsync.data.repository.SyncResult
 
 /**
@@ -20,7 +21,7 @@ class AutoSyncWorker(
         val app = applicationContext as CallSyncApplication
         val syncRepository = app.container.syncRepository
 
-        return when (syncRepository.syncPending()) {
+        return when (syncRepository.syncPending(CallLogSyncTrigger.PERIODIC)) {
             is SyncResult.Completed,
             SyncResult.NothingToSync -> Result.success()
 

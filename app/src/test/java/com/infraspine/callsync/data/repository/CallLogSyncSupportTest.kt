@@ -120,6 +120,61 @@ class CallLogSyncSupportTest {
         assertFalse(decision.skippedFullHistory)
     }
 
+    @Test
+    fun shouldRunRecoveryAlwaysForManualAndAppOpenTriggers() {
+        assertTrue(
+            CallLogSyncSupport.shouldRunRecovery(
+                trigger = CallLogSyncTrigger.MANUAL,
+                lastRecoveryAt = 10_000L,
+                now = 20_000L,
+                recoveryIntervalMs = 86_400_000L
+            )
+        )
+        assertTrue(
+            CallLogSyncSupport.shouldRunRecovery(
+                trigger = CallLogSyncTrigger.APP_OPEN,
+                lastRecoveryAt = 10_000L,
+                now = 20_000L,
+                recoveryIntervalMs = 86_400_000L
+            )
+        )
+    }
+
+    @Test
+    fun shouldRunRecoveryForPeriodicOnlyWhenDue() {
+        assertFalse(
+            CallLogSyncSupport.shouldRunRecovery(
+                trigger = CallLogSyncTrigger.PERIODIC,
+                lastRecoveryAt = 15_000L,
+                now = 20_000L,
+                recoveryIntervalMs = 10_000L
+            )
+        )
+        assertTrue(
+            CallLogSyncSupport.shouldRunRecovery(
+                trigger = CallLogSyncTrigger.PERIODIC,
+                lastRecoveryAt = 5_000L,
+                now = 20_000L,
+                recoveryIntervalMs = 10_000L
+            )
+        )
+    }
+
+    @Test
+    fun mergeFetchedLogsKeepsOlderRecoveryCallsWithoutDuplicatingCursorResults() {
+        val olderMissing = mobileCallLog(id = 10L, startedAt = 1_000L)
+        val duplicateNewer = mobileCallLog(id = 30L, startedAt = 3_000L)
+        val newerCursor = mobileCallLog(id = 30L, startedAt = 3_000L)
+        val newestCursor = mobileCallLog(id = 40L, startedAt = 4_000L)
+
+        val merged = CallLogSyncSupport.mergeFetchedLogs(
+            cursorFetched = listOf(newerCursor, newestCursor),
+            recoveryFetched = listOf(olderMissing, duplicateNewer)
+        )
+
+        assertEquals(listOf(10L, 30L, 40L), merged.map { it.id })
+    }
+
     private fun mobileCallLog(
         id: Long,
         startedAt: Long

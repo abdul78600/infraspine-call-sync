@@ -227,6 +227,13 @@ class SecureSettingsStore(context: Context) {
         }
     }
 
+    fun lastCallLogRecoveryAt(profileKey: String): Long =
+        prefs.getLong(callLogRecoveryAtKey(profileKey), 0L)
+
+    fun setLastCallLogRecoveryAt(profileKey: String, value: Long) {
+        prefs.edit { putLong(callLogRecoveryAtKey(profileKey), value) }
+    }
+
     fun lastSyncedCallLogId(profileKey: String): Long = callLogCursor(profileKey).lastSyncedAndroidCallLogId
 
     fun setLastSyncedCallLogId(profileKey: String, value: Long) {
@@ -247,6 +254,7 @@ class SecureSettingsStore(context: Context) {
     private fun callLogSyncStateTotalLogsKey(profileKey: String) = "$KEY_SERVER_TOTAL_LOGS_PREFIX$profileKey"
     private fun callLogSyncStateInstanceIdKey(profileKey: String) = "$KEY_SERVER_INSTANCE_ID_STATE_PREFIX$profileKey"
     private fun callLogResetRequestedKey(profileKey: String) = "$KEY_CALL_LOG_RESET_REQUESTED_PREFIX$profileKey"
+    private fun callLogRecoveryAtKey(profileKey: String) = "$KEY_CALL_LOG_RECOVERY_AT_PREFIX$profileKey"
     private fun serverInstanceIdKey(normalizedUrl: String) = "$KEY_SERVER_INSTANCE_ID_PREFIX$normalizedUrl"
 
     fun isCrmConfigured(): Boolean =
@@ -291,5 +299,6 @@ class SecureSettingsStore(context: Context) {
         private const val KEY_SERVER_INSTANCE_ID_PREFIX = "server_instance_id_"
         private const val KEY_SERVER_INSTANCE_ID_STATE_PREFIX = "server_instance_id_state_"
         private const val KEY_CALL_LOG_RESET_REQUESTED_PREFIX = "call_log_reset_requested_"
+        private const val KEY_CALL_LOG_RECOVERY_AT_PREFIX = "call_log_recovery_at_"
     }
 }

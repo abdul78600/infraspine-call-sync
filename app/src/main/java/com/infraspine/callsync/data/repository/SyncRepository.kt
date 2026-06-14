@@ -119,7 +119,7 @@ class SyncRepository(
         RealCrmUploader(context.applicationContext, settingsStore) { apiFactory.getService() }
     }
 
-    suspend fun syncPending(): SyncResult {
+    suspend fun syncPending(trigger: CallLogSyncTrigger = CallLogSyncTrigger.PERIODIC): SyncResult {
         if (settingsStore.crmServerUrl.isNullOrBlank()) {
             return SyncResult.ApiNotConfigured
         }
@@ -140,7 +140,7 @@ class SyncRepository(
             return SyncResult.AuthRequired
         }
 
-        val callLogResult = syncCallLogs(api, deviceId)
+        val callLogResult = syncCallLogs(api, deviceId, trigger)
         if (callLogResult.authRequired) {
             return SyncResult.AuthRequired
         }
@@ -172,7 +172,7 @@ class SyncRepository(
         }
     }
 
-    suspend fun syncCallLogsOnly(): CallLogSyncStats {
+    suspend fun syncCallLogsOnly(trigger: CallLogSyncTrigger = CallLogSyncTrigger.MANUAL): CallLogSyncStats {
         if (!settingsStore.isCrmConfigured()) {
             NetworkDiagnostics.logCallLogSyncSkipped("CRM server URL or token missing")
             return CallLogSyncStats()
@@ -186,7 +186,7 @@ class SyncRepository(
             return CallLogSyncStats()
         }
         val deviceId = DeviceIdProvider.getOrCreate(context.applicationContext, settingsStore)
-        return syncCallLogs(apiFactory.getService(), deviceId)
+        return syncCallLogs(apiFactory.getService(), deviceId, trigger)
     }
 
     suspend fun refreshCallLogSyncState() {
@@ -207,14 +207,14 @@ class SyncRepository(
     suspend fun startAuthenticatedSession() {
         activateAuthenticatedSession()
         refreshCallLogSyncState()
-        syncCallLogsOnly()
+        syncCallLogsOnly(CallLogSyncTrigger.LOGIN)
     }
 
     fun startAuthenticatedSessionInBackground() {
         activateAuthenticatedSession()
         repositoryScope.launch {
             refreshCallLogSyncState()
-            syncCallLogsOnly()
+            syncCallLogsOnly(CallLogSyncTrigger.LOGIN)
         }
     }
 
@@ -235,7 +235,7 @@ class SyncRepository(
         lastAppOpenSyncAttemptAt = now
 
         refreshCallLogSyncState()
-        syncCallLogsOnly()
+        syncCallLogsOnly(CallLogSyncTrigger.APP_OPEN)
     }
 
     /**
@@ -417,7 +417,11 @@ class SyncRepository(
     // Call logs
     // ---------------------------------------------------------------------
 
-    private suspend fun syncCallLogs(api: CrmApiService?, deviceId: String): CallLogSyncStats {
+    private suspend fun syncCallLogs(
+        api: CrmApiService?,
+        deviceId: String,
+        trigger: CallLogSyncTrigger
+    ): CallLogSyncStats {
         if (settingsStore.dummyTestMode || !settingsStore.isCrmConfigured() || !hasCallLogPermission()) {
             val reason = when {
                 settingsStore.dummyTestMode -> "dummy/test mode is enabled"
@@ -483,117 +487,166 @@ class SyncRepository(
                 NetworkDiagnostics.logCallLogSyncSkipped("server has no checkpoint; seeded call-log sync from now")
             }
             val queryCursor = cursorDecision.queryCursor
-        NetworkDiagnostics.logCallLogSyncCursor(
-            localStartedAt = localCursor.lastSyncedCallStartedAt,
-            localAndroidId = localCursor.lastSyncedAndroidCallLogId,
-            remoteStartedAt = remoteState.latestCallStartedAt,
-            remoteAndroidId = remoteState.latestAndroidCallLogId,
-            effectiveStartedAt = queryCursor.lastSyncedCallStartedAt,
-            effectiveAndroidId = queryCursor.lastSyncedAndroidCallLogId
-        )
-        val fetched = callLogReader.loadAfterCursor(
-            lastSyncedAndroidCallLogId = queryCursor.lastSyncedAndroidCallLogId,
-            lastSyncedCallStartedAt = queryCursor.lastSyncedCallStartedAt
-        )
-        if (fetched.isEmpty()) {
-            if (queryCursor != localCursor && !queryCursor.isEmpty()) {
-                updateCallLogCursor(
-                    profileKey,
-                    queryCursor.copy(lastCallLogSyncAt = System.currentTimeMillis())
+            NetworkDiagnostics.logCallLogSyncCursor(
+                localStartedAt = localCursor.lastSyncedCallStartedAt,
+                localAndroidId = localCursor.lastSyncedAndroidCallLogId,
+                remoteStartedAt = remoteState.latestCallStartedAt,
+                remoteAndroidId = remoteState.latestAndroidCallLogId,
+                effectiveStartedAt = queryCursor.lastSyncedCallStartedAt,
+                effectiveAndroidId = queryCursor.lastSyncedAndroidCallLogId
+            )
+            val syncStartedAt = System.currentTimeMillis()
+            val shouldRunRecovery = CallLogSyncSupport.shouldRunRecovery(
+                trigger = trigger,
+                lastRecoveryAt = settingsStore.lastCallLogRecoveryAt(profileKey),
+                now = syncStartedAt,
+                recoveryIntervalMs = CALL_LOG_RECOVERY_INTERVAL_MS
+            )
+            val cursorFetched = callLogReader.loadAfterCursor(
+                lastSyncedAndroidCallLogId = queryCursor.lastSyncedAndroidCallLogId,
+                lastSyncedCallStartedAt = queryCursor.lastSyncedCallStartedAt
+            )
+            val recoveryFetched = if (shouldRunRecovery) {
+                val recoveryWindowStartedAt = (syncStartedAt - CALL_LOG_RECOVERY_WINDOW_MS).coerceAtLeast(0L)
+                callLogReader.loadSince(recoveryWindowStartedAt)
+            } else {
+                emptyList()
+            }
+            val fetched = CallLogSyncSupport.mergeFetchedLogs(cursorFetched, recoveryFetched)
+            val cursorAdvanceLog = cursorFetched.maxByOrNull { it.id }
+            if (fetched.isEmpty()) {
+                persistCallLogCursorAfterSuccessfulPass(
+                    profileKey = profileKey,
+                    localCursor = localCursor,
+                    queryCursor = queryCursor,
+                    cursorAdvanceLog = cursorAdvanceLog,
+                    syncedAt = syncStartedAt
                 )
+                markCallLogRecoveryCompleted(profileKey, shouldRunRecovery, syncStartedAt)
+                NetworkDiagnostics.logCallLogSync(
+                    totalFetched = 0,
+                    uploaded = 0,
+                    skipped = 0,
+                    failed = 0,
+                    lastSyncedCallLogId = settingsStore.callLogCursor(profileKey).lastSyncedAndroidCallLogId
+                )
+                return CallLogSyncStats()
             }
-            NetworkDiagnostics.logCallLogSync(0, 0, 0, 0, queryCursor.lastSyncedAndroidCallLogId)
-            return CallLogSyncStats()
-        }
 
-        val uploadable = fetched.filter { it.isUploadable() }
-        val skipped = fetched.size - uploadable.size
-        val maxFetchedLog = fetched.maxByOrNull { it.id } ?: return CallLogSyncStats()
+            val uploadable = fetched.filter { it.isUploadable() }
+            val skipped = fetched.size - uploadable.size
 
-        if (uploadable.isEmpty()) {
-            updateCallLogCursor(profileKey, maxFetchedLog, System.currentTimeMillis())
-            NetworkDiagnostics.logCallLogSync(fetched.size, 0, skipped, 0, maxFetchedLog.id)
-            return CallLogSyncStats(skipped = skipped)
-        }
-
-        var missing = uploadable
-        var skippedDuplicate = 0
-
-        when (val outcome = checkExistingCallLogs(api, deviceId, uploadable)) {
-            is ExistenceCheckOutcome.Available -> {
-                val (existing, stillMissing) = uploadable.partition { it.id.toString() in outcome.existingRefs }
-                skippedDuplicate = existing.size
-                missing = stillMissing
+            if (uploadable.isEmpty()) {
+                persistCallLogCursorAfterSuccessfulPass(
+                    profileKey = profileKey,
+                    localCursor = localCursor,
+                    queryCursor = queryCursor,
+                    cursorAdvanceLog = cursorAdvanceLog,
+                    syncedAt = syncStartedAt
+                )
+                markCallLogRecoveryCompleted(profileKey, shouldRunRecovery, syncStartedAt)
+                NetworkDiagnostics.logCallLogSync(
+                    totalFetched = fetched.size,
+                    uploaded = 0,
+                    skipped = skipped,
+                    failed = 0,
+                    lastSyncedCallLogId = settingsStore.callLogCursor(profileKey).lastSyncedAndroidCallLogId
+                )
+                return CallLogSyncStats(skipped = skipped)
             }
-            ExistenceCheckOutcome.NotSupported -> {
-                // Endpoint not deployed yet — upload everything, as before.
+
+            var missing = uploadable
+            var skippedDuplicate = 0
+
+            when (val outcome = checkExistingCallLogs(api, deviceId, uploadable)) {
+                is ExistenceCheckOutcome.Available -> {
+                    val (existing, stillMissing) = uploadable.partition { it.id.toString() in outcome.existingRefs }
+                    skippedDuplicate = existing.size
+                    missing = stillMissing
+                }
+                ExistenceCheckOutcome.NotSupported -> {
+                    // Endpoint not deployed yet — upload everything, as before.
+                }
+                ExistenceCheckOutcome.Unauthorized -> {
+                    clearExpiredSession()
+                    NetworkDiagnostics.logCallLogSync(
+                        fetched.size,
+                        0,
+                        skipped,
+                        uploadable.size,
+                        queryCursor.lastSyncedAndroidCallLogId
+                    )
+                    return CallLogSyncStats(skipped = skipped, failed = uploadable.size, authRequired = true)
+                }
+                is ExistenceCheckOutcome.Error -> {
+                    NetworkDiagnostics.logConnectionFailure(outcome.message)
+                    // Don't advance the cursor; retry this whole batch next sync.
+                    return CallLogSyncStats(skipped = skipped, errorMessage = outcome.message)
+                }
             }
-            ExistenceCheckOutcome.Unauthorized -> {
-                clearExpiredSession()
+
+            if (missing.isEmpty()) {
+                persistCallLogCursorAfterSuccessfulPass(
+                    profileKey = profileKey,
+                    localCursor = localCursor,
+                    queryCursor = queryCursor,
+                    cursorAdvanceLog = cursorAdvanceLog,
+                    syncedAt = syncStartedAt
+                )
+                markCallLogRecoveryCompleted(profileKey, shouldRunRecovery, syncStartedAt)
+                NetworkDiagnostics.logCallLogSync(
+                    totalFetched = fetched.size,
+                    uploaded = 0,
+                    skipped = skipped,
+                    failed = 0,
+                    lastSyncedCallLogId = settingsStore.callLogCursor(profileKey).lastSyncedAndroidCallLogId
+                )
+                return CallLogSyncStats(skipped = skipped, skippedDuplicate = skippedDuplicate)
+            }
+
+            val payload = missing.map { it.toSyncItem(deviceId) }
+            NetworkDiagnostics.logCallLogSyncRequest(
+                totalFetched = fetched.size,
+                uploadable = payload.size,
+                skipped = skipped,
+                sample = payload.take(3).joinToString(prefix = "[", postfix = "]") {
+                    "{id=${it.externalCallId}, type=${it.callType}, startedAt=${it.callStartedAt}, hasPhone=${it.phoneNumber.isNotBlank()}}"
+                }
+            )
+
+            val response = try {
+                api.syncCallLogs(CallLogsSyncRequest(logs = payload))
+            } catch (io: IOException) {
+                val message = NetworkDiagnostics.classify(throwable = io)
+                NetworkDiagnostics.logConnectionFailure(message)
                 NetworkDiagnostics.logCallLogSync(
                     fetched.size,
                     0,
                     skipped,
-                    uploadable.size,
+                    missing.size,
                     queryCursor.lastSyncedAndroidCallLogId
                 )
-                return CallLogSyncStats(skipped = skipped, failed = uploadable.size, authRequired = true)
+                return CallLogSyncStats(
+                    skipped = skipped,
+                    skippedDuplicate = skippedDuplicate,
+                    failed = missing.size,
+                    errorMessage = message
+                )
             }
-            is ExistenceCheckOutcome.Error -> {
-                NetworkDiagnostics.logConnectionFailure(outcome.message)
-                // Don't advance the cursor; retry this whole batch next sync.
-                return CallLogSyncStats(skipped = skipped, errorMessage = outcome.message)
-            }
-        }
 
-        if (missing.isEmpty()) {
-            // Everything in this batch is accounted for: either non-uploadable or
-            // already on the server.
-            updateCallLogCursor(profileKey, maxFetchedLog, System.currentTimeMillis())
-            NetworkDiagnostics.logCallLogSync(fetched.size, 0, skipped, 0, maxFetchedLog.id)
-            return CallLogSyncStats(skipped = skipped, skippedDuplicate = skippedDuplicate)
-        }
-
-        val payload = missing.map { it.toSyncItem(deviceId) }
-        NetworkDiagnostics.logCallLogSyncRequest(
-            totalFetched = fetched.size,
-            uploadable = payload.size,
-            skipped = skipped,
-            sample = payload.take(3).joinToString(prefix = "[", postfix = "]") {
-                "{id=${it.externalCallId}, type=${it.callType}, startedAt=${it.callStartedAt}, hasPhone=${it.phoneNumber.isNotBlank()}}"
-            }
-        )
-
-        val response = try {
-            api.syncCallLogs(CallLogsSyncRequest(logs = payload))
-        } catch (io: IOException) {
-            val message = NetworkDiagnostics.classify(throwable = io)
-            NetworkDiagnostics.logConnectionFailure(message)
-            NetworkDiagnostics.logCallLogSync(
-                fetched.size,
-                0,
-                skipped,
-                missing.size,
-                queryCursor.lastSyncedAndroidCallLogId
-            )
-            return CallLogSyncStats(
-                skipped = skipped,
-                skippedDuplicate = skippedDuplicate,
-                failed = missing.size,
-                errorMessage = message
-            )
-        }
-
-        return if (response.isSuccessful) {
+            return if (response.isSuccessful) {
                 val body = response.body()
                 val uploaded = body?.insertedCount ?: body?.uploaded ?: missing.size
                 val serverDuplicateCount = body?.duplicateCount ?: body?.skipped ?: 0
                 val totalSkippedDuplicate = skippedDuplicate + serverDuplicateCount
-                updateCallLogCursor(
+                persistCallLogCursorAfterSuccessfulPass(
                     profileKey = profileKey,
-                    cursor = responseCursor(body, missing.maxByOrNull { it.id } ?: maxFetchedLog)
-                        ?: cursorFromLog(maxFetchedLog, System.currentTimeMillis())
+                    localCursor = localCursor,
+                    queryCursor = queryCursor,
+                    cursorAdvanceLog = cursorAdvanceLog,
+                    syncedAt = System.currentTimeMillis()
                 )
+                markCallLogRecoveryCompleted(profileKey, shouldRunRecovery, System.currentTimeMillis())
                 val finalCursor = settingsStore.callLogCursor(profileKey)
                 NetworkDiagnostics.logCallLogSync(
                     fetched.size,
@@ -770,15 +823,25 @@ class SyncRepository(
         settingsStore.setCallLogResetRequested(profileKey, false)
     }
 
-    private fun responseCursor(
-        response: com.infraspine.callsync.data.remote.CallLogsSyncResponse?,
-        fallbackLog: MobileCallLog
-    ): CallLogSyncCursor? =
-        CallLogSyncSupport.nextCursor(
-            response = response,
-            fallbackLog = fallbackLog,
-            syncedAt = System.currentTimeMillis()
-        )
+    private fun persistCallLogCursorAfterSuccessfulPass(
+        profileKey: String,
+        localCursor: CallLogSyncCursor,
+        queryCursor: CallLogSyncCursor,
+        cursorAdvanceLog: MobileCallLog?,
+        syncedAt: Long
+    ) {
+        when {
+            cursorAdvanceLog != null -> updateCallLogCursor(profileKey, cursorAdvanceLog, syncedAt)
+            queryCursor != localCursor && !queryCursor.isEmpty() ->
+                updateCallLogCursor(profileKey, queryCursor.copy(lastCallLogSyncAt = syncedAt))
+        }
+    }
+
+    private fun markCallLogRecoveryCompleted(profileKey: String, recoveryExecuted: Boolean, completedAt: Long) {
+        if (recoveryExecuted) {
+            settingsStore.setLastCallLogRecoveryAt(profileKey, completedAt)
+        }
+    }
 
     private fun cursorFromLog(log: MobileCallLog, syncedAt: Long): CallLogSyncCursor =
         CallLogSyncCursor(
@@ -860,6 +923,8 @@ class SyncRepository(
         /** Max records per check-existing request. */
         private const val CHECK_EXISTING_BATCH_SIZE = 200
         private const val APP_OPEN_SYNC_THROTTLE_MS = 15_000L
+        private const val CALL_LOG_RECOVERY_WINDOW_MS = 7L * 24L * 60L * 60L * 1000L
+        private const val CALL_LOG_RECOVERY_INTERVAL_MS = 24L * 60L * 60L * 1000L
     }
 }
 
