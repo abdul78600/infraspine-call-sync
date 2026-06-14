@@ -709,10 +709,19 @@ class SyncRepository(
         deviceId: String,
         uploadable: List<MobileCallLog>
     ): ExistenceCheckOutcome {
-        val items = uploadable.map { it.toCheckItem() }
+        val items = uploadable.map { it.toCheckItem(deviceId) }
+        val chunks = items.chunked(CHECK_EXISTING_BATCH_SIZE)
 
         val existing = mutableSetOf<String>()
-        for (chunk in items.chunked(CHECK_EXISTING_BATCH_SIZE)) {
+        for ((chunkIndex, chunk) in chunks.withIndex()) {
+            NetworkDiagnostics.logCallLogCheckExistingRequest(
+                totalRecords = items.size,
+                chunkIndex = chunkIndex + 1,
+                chunkSize = chunk.size,
+                sample = chunk.take(3).joinToString(prefix = "[", postfix = "]") {
+                    "{externalCallId=${it.externalCallId}, type=${it.callType}, startedAt=${it.callStartedAt}, hasPhone=${it.phoneNumber.isNotBlank()}}"
+                }
+            )
             val response = try {
                 api.checkExistingCallLogs(CallLogExistingCheckRequest(deviceId = deviceId, records = chunk))
             } catch (io: IOException) {
@@ -720,14 +729,18 @@ class SyncRepository(
             }
 
             if (!response.isSuccessful) {
+                val rawBody = runCatching { response.errorBody()?.string() }.getOrNull()
+                NetworkDiagnostics.logCallLogCheckExistingResponse(response.code(), rawBody)
                 when (response.code()) {
                     404, 501 -> return ExistenceCheckOutcome.NotSupported
                     401 -> return ExistenceCheckOutcome.Unauthorized
                     else -> {
-                        val rawBody = runCatching { response.errorBody()?.string() }.getOrNull()
                         val serverMessage = UploadErrorParser.extractMessage(rawBody)
                         return ExistenceCheckOutcome.Error(
-                            NetworkDiagnostics.classify(httpCode = response.code(), serverMessage = serverMessage)
+                            NetworkDiagnostics.classify(
+                                httpCode = response.code(),
+                                serverMessage = serverMessage ?: "call log check-existing failed for chunk ${chunkIndex + 1}/${chunks.size}"
+                            )
                         )
                     }
                 }
@@ -863,13 +876,14 @@ class SyncRepository(
             deviceId = deviceId
         )
 
-    private fun MobileCallLog.toCheckItem(): CallLogCheckItem =
+    private fun MobileCallLog.toCheckItem(deviceId: String): CallLogCheckItem =
         CallLogCheckItem(
-            clientRef = id.toString(),
+            externalCallId = id.toString(),
             phoneNumber = normalizedPhoneNumber().orEmpty(),
             callType = callType.apiValue(),
             callStartedAt = startedAt.toIso8601(),
-            durationSeconds = durationSeconds
+            durationSeconds = durationSeconds,
+            deviceId = deviceId
         )
 
     private fun MobileCallLog.normalizedPhoneNumber(): String? =

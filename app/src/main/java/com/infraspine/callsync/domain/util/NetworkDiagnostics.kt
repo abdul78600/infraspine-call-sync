@@ -147,6 +147,27 @@ object NetworkDiagnostics {
         )
     }
 
+    fun logCallLogCheckExistingRequest(
+        totalRecords: Int,
+        chunkIndex: Int,
+        chunkSize: Int,
+        sample: String
+    ) {
+        Log.d(
+            TAG,
+            "Call log check-existing request: totalRecords=$totalRecords chunkIndex=$chunkIndex " +
+                "chunkSize=$chunkSize sample=$sample"
+        )
+    }
+
+    fun logCallLogCheckExistingResponse(httpCode: Int, rawBody: String?) {
+        Log.d(
+            TAG,
+            "Call log check-existing response: status=$httpCode " +
+                "serverErrorBody=${rawBody?.takeIf { it.isNotBlank() } ?: "<empty>"}"
+        )
+    }
+
     fun logCallLogSyncCursor(
         localStartedAt: Long,
         localAndroidId: Long,
