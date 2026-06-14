@@ -20,7 +20,7 @@ internal class SingleFlightCallLogSyncGate {
     }
 }
 
-internal enum class CallLogSyncTrigger {
+enum class CallLogSyncTrigger {
     MANUAL,
     LOGIN,
     APP_OPEN,
