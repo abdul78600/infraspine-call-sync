@@ -155,6 +155,20 @@ object NetworkDiagnostics {
         )
     }
 
+    fun logCallLogSyncBatchRequest(
+        batchIndex: Int,
+        batchCount: Int,
+        batchSize: Int,
+        totalMissing: Int,
+        sample: String
+    ) {
+        Log.d(
+            TAG,
+            "Call log sync batch request: batch=$batchIndex/$batchCount batchSize=$batchSize " +
+                "totalMissing=$totalMissing sample=$sample"
+        )
+    }
+
     fun logCallLogSkipReasons(totalFetched: Int, skipped: Int, summary: String) {
         Log.i(
             TAG,

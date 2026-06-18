@@ -131,6 +131,8 @@ data class CallLogsSyncResponse(
     val skipped: Int? = null,
     val insertedCount: Int? = null,
     val duplicateCount: Int? = null,
+    val invalid: Int? = null,
+    val failed: Int? = null,
     val latestServerCallStartedAt: JsonElement? = null,
     val latestServerCallLogId: JsonElement? = null,
     val message: String? = null

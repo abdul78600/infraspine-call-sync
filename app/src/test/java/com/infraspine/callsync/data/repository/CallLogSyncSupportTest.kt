@@ -55,6 +55,34 @@ class CallLogSyncSupportTest {
     }
 
     @Test
+    fun syncBatchesRespectBackendLimitForOneThousandRecords() {
+        val batches = CallLogSyncSupport.syncBatches((1..1000).toList(), maxBatchSize = 200)
+
+        assertEquals(5, batches.size)
+        assertEquals(listOf(200, 200, 200, 200, 200), batches.map { it.size })
+        assertEquals(1, batches.first().first())
+        assertEquals(1000, batches.last().last())
+    }
+
+    @Test
+    fun syncBatchesKeepTailUnderBackendLimit() {
+        val batches = CallLogSyncSupport.syncBatches((1..1001).toList(), maxBatchSize = 200)
+
+        assertEquals(6, batches.size)
+        assertEquals(listOf(200, 200, 200, 200, 200, 1), batches.map { it.size })
+    }
+
+    @Test
+    fun rejectedCountIncludesInvalidAndFailedRows() {
+        val response = CallLogsSyncResponse(
+            invalid = 2,
+            failed = 3
+        )
+
+        assertEquals(5, CallLogSyncSupport.rejectedCount(response))
+    }
+
+    @Test
     fun singleFlightGateRejectsParallelAcquireUntilRelease() {
         val gate = SingleFlightCallLogSyncGate()
 

@@ -39,6 +39,14 @@ internal data class CallLogCursorDecision(
 )
 
 internal object CallLogSyncSupport {
+    fun <T> syncBatches(items: List<T>, maxBatchSize: Int): List<List<T>> {
+        require(maxBatchSize > 0) { "maxBatchSize must be positive" }
+        return items.chunked(maxBatchSize)
+    }
+
+    fun rejectedCount(response: CallLogsSyncResponse?): Int =
+        (response?.invalid ?: 0) + (response?.failed ?: 0)
+
     fun successCounts(
         response: CallLogsSyncResponse?,
         fallbackBatchSize: Int

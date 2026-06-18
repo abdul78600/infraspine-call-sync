@@ -641,101 +641,148 @@ class SyncRepository(
                 return CallLogSyncStats(skipped = skipped, skippedDuplicate = skippedDuplicate)
             }
 
-            val payload = missing.map { it.toSyncItem(deviceId) }
+            val batches = CallLogSyncSupport.syncBatches(missing, CALL_LOG_SYNC_BATCH_SIZE)
             NetworkDiagnostics.logCallLogSyncRequest(
                 totalFetched = fetched.size,
-                uploadable = payload.size,
+                uploadable = missing.size,
                 skipped = skipped,
-                sample = payload.take(3).joinToString(prefix = "[", postfix = "]") {
-                    "{id=${it.externalCallId}, type=${it.callType}, startedAt=${it.callStartedAt}, hasPhone=${it.phoneNumber.isNotBlank()}}"
-                }
+                sample = sampleCallLogPayload(missing.take(3), deviceId)
             )
 
-            val response = try {
-                api.syncCallLogs(CallLogsSyncRequest(logs = payload))
-            } catch (io: IOException) {
-                val message = NetworkDiagnostics.classify(throwable = io)
-                NetworkDiagnostics.logConnectionFailure(message)
-                NetworkDiagnostics.logCallLogSync(
-                    fetched.size,
-                    0,
-                    skipped,
-                    missing.size,
-                    queryCursor.lastSyncedAndroidCallLogId
-                )
-                return CallLogSyncStats(
-                    skipped = skipped,
-                    skippedDuplicate = skippedDuplicate,
-                    failed = missing.size,
-                    errorMessage = message
-                )
-            }
+            var uploaded = 0
+            var serverDuplicateCount = 0
+            var completedMissing = 0
 
-            return if (response.isSuccessful) {
-                val body = response.body()
-                val uploaded = body?.insertedCount ?: body?.uploaded ?: missing.size
-                val serverDuplicateCount = body?.duplicateCount ?: body?.skipped ?: 0
-                val totalSkippedDuplicate = skippedDuplicate + serverDuplicateCount
-                persistCallLogCursorAfterSuccessfulPass(
-                    profileKey = profileKey,
-                    localCursor = localCursor,
-                    queryCursor = queryCursor,
-                    cursorAdvanceLog = cursorAdvanceLog,
-                    syncedAt = System.currentTimeMillis()
+            for ((batchIndex, batch) in batches.withIndex()) {
+                val payload = batch.map { it.toSyncItem(deviceId) }
+                NetworkDiagnostics.logCallLogSyncBatchRequest(
+                    batchIndex = batchIndex + 1,
+                    batchCount = batches.size,
+                    batchSize = payload.size,
+                    totalMissing = missing.size,
+                    sample = sampleCallLogSyncItems(payload.take(3))
                 )
-                markCallLogRecoveryCompleted(profileKey, shouldRunRecovery, System.currentTimeMillis())
-                val finalCursor = settingsStore.callLogCursor(profileKey)
-                NetworkDiagnostics.logCallLogSync(
-                    fetched.size,
-                    uploaded,
-                    skipped + totalSkippedDuplicate,
-                    0,
-                    finalCursor.lastSyncedAndroidCallLogId
-                )
-                CallLogSyncStats(uploaded = uploaded, skipped = skipped, skippedDuplicate = totalSkippedDuplicate)
-            } else {
-                val rawBody = runCatching { response.errorBody()?.string() }.getOrNull()
-                NetworkDiagnostics.logCallLogSyncResponse(response.code(), rawBody)
-                val serverMessage = UploadErrorParser.extractMessage(rawBody)
-                val requestError = NetworkDiagnostics.classify(httpCode = response.code(), serverMessage = serverMessage)
-                NetworkDiagnostics.logConnectionFailure(requestError)
 
-                if (response.code() == 401) {
-                    clearExpiredSession()
+                val response = try {
+                    api.syncCallLogs(CallLogsSyncRequest(logs = payload))
+                } catch (io: IOException) {
+                    val message = NetworkDiagnostics.classify(throwable = io)
+                    val failed = CallLogSyncSupport.remainingCount(missing.size, completedMissing)
+                    NetworkDiagnostics.logConnectionFailure(message)
                     NetworkDiagnostics.logCallLogSync(
                         fetched.size,
-                        0,
-                        skipped,
-                        missing.size,
+                        uploaded,
+                        skipped + skippedDuplicate + serverDuplicateCount,
+                        failed,
                         queryCursor.lastSyncedAndroidCallLogId
                     )
                     return CallLogSyncStats(
+                        uploaded = uploaded,
                         skipped = skipped,
-                        skippedDuplicate = skippedDuplicate,
-                        failed = missing.size,
-                        authRequired = true,
-                        errorMessage = serverMessage
+                        skippedDuplicate = skippedDuplicate + serverDuplicateCount,
+                        failed = failed,
+                        errorMessage = message
                     )
                 }
 
-                if (response.code() == 429) {
-                    NetworkDiagnostics.logCallLogSyncSkipped("call log sync rate limited by server")
+                if (!response.isSuccessful) {
+                    val rawBody = runCatching { response.errorBody()?.string() }.getOrNull()
+                    val failed = CallLogSyncSupport.remainingCount(missing.size, completedMissing)
+                    NetworkDiagnostics.logCallLogSyncResponse(response.code(), rawBody)
+                    val serverMessage = UploadErrorParser.extractMessage(rawBody)
+                    val requestError = NetworkDiagnostics.classify(httpCode = response.code(), serverMessage = serverMessage)
+                    NetworkDiagnostics.logConnectionFailure(requestError)
+
+                    if (response.code() == 401) {
+                        clearExpiredSession()
+                        NetworkDiagnostics.logCallLogSync(
+                            fetched.size,
+                            uploaded,
+                            skipped + skippedDuplicate + serverDuplicateCount,
+                            failed,
+                            queryCursor.lastSyncedAndroidCallLogId
+                        )
+                        return CallLogSyncStats(
+                            uploaded = uploaded,
+                            skipped = skipped,
+                            skippedDuplicate = skippedDuplicate + serverDuplicateCount,
+                            failed = failed,
+                            authRequired = true,
+                            errorMessage = serverMessage
+                        )
+                    }
+
+                    if (response.code() == 429) {
+                        NetworkDiagnostics.logCallLogSyncSkipped("call log sync rate limited by server")
+                    }
+
+                    NetworkDiagnostics.logCallLogSync(
+                        fetched.size,
+                        uploaded,
+                        skipped + skippedDuplicate + serverDuplicateCount,
+                        failed,
+                        queryCursor.lastSyncedAndroidCallLogId
+                    )
+                    return CallLogSyncStats(
+                        uploaded = uploaded,
+                        skipped = skipped,
+                        skippedDuplicate = skippedDuplicate + serverDuplicateCount,
+                        failed = failed,
+                        errorMessage = serverMessage ?: requestError
+                    )
                 }
 
-                NetworkDiagnostics.logCallLogSync(
-                    fetched.size,
-                    0,
-                    skipped,
-                    missing.size,
-                    queryCursor.lastSyncedAndroidCallLogId
-                )
-                CallLogSyncStats(
-                    skipped = skipped,
-                    skippedDuplicate = skippedDuplicate,
-                    failed = missing.size,
-                    errorMessage = serverMessage ?: requestError
-                )
+                val body = response.body()
+                val rejected = CallLogSyncSupport.rejectedCount(body)
+                if (body?.success == false || rejected > 0) {
+                    val message = body?.message
+                        ?: "Server rejected $rejected call log(s) in batch ${batchIndex + 1}/${batches.size}"
+                    val failed = CallLogSyncSupport.remainingCount(missing.size, completedMissing)
+                    NetworkDiagnostics.logCallLogSyncResponse(
+                        200,
+                        "success=${body?.success} invalid=${body?.invalid ?: 0} failed=${body?.failed ?: 0} message=$message"
+                    )
+                    NetworkDiagnostics.logConnectionFailure(message)
+                    NetworkDiagnostics.logCallLogSync(
+                        fetched.size,
+                        uploaded,
+                        skipped + skippedDuplicate + serverDuplicateCount,
+                        failed,
+                        queryCursor.lastSyncedAndroidCallLogId
+                    )
+                    return CallLogSyncStats(
+                        uploaded = uploaded,
+                        skipped = skipped,
+                        skippedDuplicate = skippedDuplicate + serverDuplicateCount,
+                        failed = failed,
+                        errorMessage = message
+                    )
+                }
+
+                val counts = CallLogSyncSupport.successCounts(body, fallbackBatchSize = batch.size)
+                uploaded += counts.uploaded
+                serverDuplicateCount += counts.duplicateCount
+                completedMissing += batch.size
             }
+
+            val totalSkippedDuplicate = skippedDuplicate + serverDuplicateCount
+            persistCallLogCursorAfterSuccessfulPass(
+                profileKey = profileKey,
+                localCursor = localCursor,
+                queryCursor = queryCursor,
+                cursorAdvanceLog = cursorAdvanceLog,
+                syncedAt = System.currentTimeMillis()
+            )
+            markCallLogRecoveryCompleted(profileKey, shouldRunRecovery, System.currentTimeMillis())
+            val finalCursor = settingsStore.callLogCursor(profileKey)
+            NetworkDiagnostics.logCallLogSync(
+                fetched.size,
+                uploaded,
+                skipped + totalSkippedDuplicate,
+                0,
+                finalCursor.lastSyncedAndroidCallLogId
+            )
+            return CallLogSyncStats(uploaded = uploaded, skipped = skipped, skippedDuplicate = totalSkippedDuplicate)
         } finally {
             callLogSyncGate.release()
         }
@@ -963,6 +1010,14 @@ class SyncRepository(
             durationSeconds = durationSeconds
         )
 
+    private fun sampleCallLogPayload(logs: List<MobileCallLog>, deviceId: String): String =
+        sampleCallLogSyncItems(logs.map { it.toSyncItem(deviceId) })
+
+    private fun sampleCallLogSyncItems(items: List<CallLogSyncItem>): String =
+        items.joinToString(prefix = "[", postfix = "]") {
+            "{id=${it.externalCallId}, type=${it.callType}, startedAt=${it.callStartedAt}, hasPhone=${it.phoneNumber.isNotBlank()}}"
+        }
+
     private fun MobileCallLog.normalizedPhoneNumber(): String? =
         DedupKeyBuilder.normalizePhoneNumber(phoneNumber)
 
@@ -1054,8 +1109,9 @@ class SyncRepository(
         val ISO_MILLIS_UTC: DateTimeFormatter =
             DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'").withZone(ZoneOffset.UTC)
 
-        /** Max records per check-existing request. */
+        /** Max records per check-existing and sync request. */
         private const val CHECK_EXISTING_BATCH_SIZE = 200
+        private const val CALL_LOG_SYNC_BATCH_SIZE = 200
         private const val APP_OPEN_SYNC_THROTTLE_MS = 15_000L
         private const val CALL_LOG_RECOVERY_WINDOW_MS = 7L * 24L * 60L * 60L * 1000L
         private const val CALL_LOG_RECOVERY_INTERVAL_MS = 24L * 60L * 60L * 1000L
