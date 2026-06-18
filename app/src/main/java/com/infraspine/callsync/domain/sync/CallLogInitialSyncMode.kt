@@ -6,6 +6,6 @@ enum class CallLogInitialSyncMode(val persistedValue: String) {
 
     companion object {
         fun fromPersisted(value: String?): CallLogInitialSyncMode =
-            entries.firstOrNull { it.persistedValue == value } ?: FROM_NOW
+            entries.firstOrNull { it.persistedValue == value } ?: FULL_HISTORY
     }
 }

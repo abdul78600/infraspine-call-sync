@@ -78,6 +78,20 @@ class RecordingRepository(
         var newCount = 0
         for (file in scannedFiles) {
             val existing = dao.findByUriAndSize(file.uri, file.size)
+            if (existing != null && existing.syncStatus == SyncStatus.UNMATCHED && callLogAvailable) {
+                val rematch = callLogMatcher.match(file.lastModified, callLog).entry
+                if (rematch != null) {
+                    dao.updateUnmatchedRecordingMatch(
+                        id = existing.id,
+                        phoneNumber = rematch.phoneNumber,
+                        callStartedAt = rematch.startedAt,
+                        durationSeconds = rematch.durationSeconds,
+                        callType = rematch.callType,
+                        status = SyncStatus.PENDING
+                    )
+                    newCount++
+                }
+            }
             if (existing != null) continue // duplicate — already tracked, skip silently
 
             val matchResult = if (callLogAvailable) {

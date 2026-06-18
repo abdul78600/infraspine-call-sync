@@ -6,6 +6,7 @@ import androidx.room.OnConflictStrategy
 import androidx.room.Query
 import androidx.room.Update
 import com.infraspine.callsync.data.local.entity.RecordingEntity
+import com.infraspine.callsync.domain.model.CallType
 import com.infraspine.callsync.domain.model.SyncStatus
 import kotlinx.coroutines.flow.Flow
 
@@ -78,6 +79,25 @@ interface RecordingDao {
 
     @Query("UPDATE recordings SET fileHash = :hash WHERE id = :id")
     suspend fun updateFileHash(id: Long, hash: String)
+
+    @Query(
+        """UPDATE recordings
+           SET phoneNumber = :phoneNumber,
+               callStartedAt = :callStartedAt,
+               durationSeconds = :durationSeconds,
+               callType = :callType,
+               syncStatus = :status,
+               errorMessage = NULL
+           WHERE id = :id AND syncStatus = 'UNMATCHED'"""
+    )
+    suspend fun updateUnmatchedRecordingMatch(
+        id: Long,
+        phoneNumber: String?,
+        callStartedAt: Long?,
+        durationSeconds: Long?,
+        callType: CallType,
+        status: SyncStatus
+    )
 
     /** Re-queues all SYNCED recordings as PENDING for "Reset sync history". */
     @Query("UPDATE recordings SET syncStatus = 'PENDING', uploadedAt = NULL, serverRecordingId = NULL, errorMessage = NULL WHERE syncStatus = 'SYNCED'")
