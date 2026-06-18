@@ -3,6 +3,7 @@ package com.infraspine.callsync.data.repository
 import android.content.Context
 import com.google.gson.Gson
 import com.google.gson.JsonElement
+import com.google.gson.JsonObject
 import com.google.gson.JsonPrimitive
 import com.infraspine.callsync.data.prefs.CallLogSyncCursor
 import com.infraspine.callsync.data.prefs.CallLogSyncStateSnapshot
@@ -762,8 +763,8 @@ class SyncRepository(
             )
             val response = try {
                 api.checkExistingCallLogs(request)
-            } catch (io: IOException) {
-                return ExistenceCheckOutcome.Error(NetworkDiagnostics.classify(throwable = io))
+            } catch (throwable: Throwable) {
+                return ExistenceCheckOutcome.Error(NetworkDiagnostics.classify(throwable = throwable))
             }
 
             if (!response.isSuccessful) {
@@ -785,11 +786,11 @@ class SyncRepository(
             }
 
             val body = response.body()
-            body?.existing?.let { existing += it }
-            body?.missing?.let { missing += it }
+            existing += parseCheckExistingRefs(body?.existing)
+            missing += parseCheckExistingRefs(body?.missing)
 
             val chunkRefs = chunk.mapTo(mutableSetOf()) { it.clientRef }
-            val accountedRefs = (body?.existing.orEmpty() + body?.missing.orEmpty()).toSet()
+            val accountedRefs = existing.intersect(chunkRefs) + missing.intersect(chunkRefs)
             val unaccountedRefs = chunkRefs - accountedRefs
             if (unaccountedRefs.isNotEmpty()) {
                 return ExistenceCheckOutcome.Error(
@@ -965,6 +966,36 @@ class SyncRepository(
     private fun MobileCallLog.normalizedPhoneNumber(): String? =
         DedupKeyBuilder.normalizePhoneNumber(phoneNumber)
 
+    private fun parseCheckExistingRefs(element: JsonElement?): Set<String> {
+        if (element == null || !element.isJsonArray) return emptySet()
+
+        return element.asJsonArray.mapNotNull { item ->
+            when {
+                item == null || item.isJsonNull -> null
+                item.isJsonPrimitive -> item.asJsonPrimitive.asStringValue()
+                item.isJsonObject -> item.asJsonObject.extractRefValue()
+                else -> null
+            }
+        }.toSet()
+    }
+
+    private fun JsonObject.extractRefValue(): String? =
+        CHECK_EXISTING_REF_KEYS.firstNotNullOfOrNull { key ->
+            get(key)?.takeIf { !it.isJsonNull }?.let { value ->
+                when {
+                    value.isJsonPrimitive -> value.asJsonPrimitive.asStringValue()
+                    else -> null
+                }
+            }
+        }
+
+    private fun JsonPrimitive.asStringValue(): String? =
+        when {
+            isString -> asString.takeIf { it.isNotBlank() }
+            isNumber -> asNumber.toString()
+            else -> null
+        }
+
     private data class FilteredCallLogs(
         val uploadable: List<MobileCallLog>,
         val skippedReasons: Map<CallLogSkipReason, Int>
@@ -1028,6 +1059,7 @@ class SyncRepository(
         private const val APP_OPEN_SYNC_THROTTLE_MS = 15_000L
         private const val CALL_LOG_RECOVERY_WINDOW_MS = 7L * 24L * 60L * 60L * 1000L
         private const val CALL_LOG_RECOVERY_INTERVAL_MS = 24L * 60L * 60L * 1000L
+        private val CHECK_EXISTING_REF_KEYS = listOf("clientRef", "externalCallId", "id", "_id")
         private val GSON = Gson()
     }
 }

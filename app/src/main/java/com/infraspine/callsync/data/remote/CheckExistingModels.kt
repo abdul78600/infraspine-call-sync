@@ -1,5 +1,7 @@
 package com.infraspine.callsync.data.remote
 
+import com.google.gson.JsonElement
+
 /**
  * Request/response shapes for the "check-existing" endpoints used to find out
  * which call logs / recordings the server already has, before uploading.
@@ -27,8 +29,8 @@ data class CallLogCheckItem(
 )
 
 data class CallLogExistingCheckResponse(
-    val existing: List<String>? = null,
-    val missing: List<String>? = null,
+    val existing: JsonElement? = null,
+    val missing: JsonElement? = null,
     val message: String? = null
 )
 
