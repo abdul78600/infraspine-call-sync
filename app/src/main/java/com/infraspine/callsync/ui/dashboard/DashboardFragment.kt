@@ -184,6 +184,7 @@ class DashboardFragment : Fragment() {
                 )
                 message.callLogsError?.takeIf { it.isNotBlank() }?.let { "$summary $it" } ?: summary
             }
+            is DashboardMessage.SyncError -> message.message
             DashboardMessage.SyncNothingPending -> getString(R.string.status_pending) + ": 0"
             DashboardMessage.SyncNetworkUnavailable -> getString(R.string.error_network_unavailable)
             DashboardMessage.SyncWifiRequired -> getString(R.string.error_wifi_required)

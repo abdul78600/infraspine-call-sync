@@ -216,15 +216,23 @@ class SyncRepository(
 
     suspend fun startAuthenticatedSession() {
         activateAuthenticatedSession()
-        refreshCallLogSyncState()
-        syncCallLogsOnly(CallLogSyncTrigger.LOGIN)
+        runCatching {
+            refreshCallLogSyncState()
+            syncCallLogsOnly(CallLogSyncTrigger.LOGIN)
+        }.onFailure {
+            NetworkDiagnostics.logUnexpectedFailure("login call-log sync", it)
+        }
     }
 
     fun startAuthenticatedSessionInBackground() {
         activateAuthenticatedSession()
         repositoryScope.launch {
-            refreshCallLogSyncState()
-            syncCallLogsOnly(CallLogSyncTrigger.LOGIN)
+            runCatching {
+                refreshCallLogSyncState()
+                syncCallLogsOnly(CallLogSyncTrigger.LOGIN)
+            }.onFailure {
+                NetworkDiagnostics.logUnexpectedFailure("background login call-log sync", it)
+            }
         }
     }
 
@@ -244,8 +252,12 @@ class SyncRepository(
         if (now - lastAppOpenSyncAttemptAt < APP_OPEN_SYNC_THROTTLE_MS) return
         lastAppOpenSyncAttemptAt = now
 
-        refreshCallLogSyncState()
-        syncCallLogsOnly(CallLogSyncTrigger.APP_OPEN)
+        runCatching {
+            refreshCallLogSyncState()
+            syncCallLogsOnly(CallLogSyncTrigger.APP_OPEN)
+        }.onFailure {
+            NetworkDiagnostics.logUnexpectedFailure("app-open call-log sync", it)
+        }
     }
 
     /**

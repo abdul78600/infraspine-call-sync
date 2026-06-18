@@ -15,6 +15,7 @@ import com.infraspine.callsync.data.repository.CallLogSyncTrigger
 import com.infraspine.callsync.data.repository.SyncRepository
 import com.infraspine.callsync.data.repository.SyncResult
 import com.infraspine.callsync.domain.model.SyncStatus
+import com.infraspine.callsync.domain.util.NetworkDiagnostics
 import com.infraspine.callsync.ui.common.Event
 import kotlinx.coroutines.launch
 
@@ -43,6 +44,7 @@ sealed class DashboardMessage {
         val callLogsFailed: Int,
         val callLogsError: String?
     ) : DashboardMessage()
+    data class SyncError(val message: String) : DashboardMessage()
     object SyncNothingPending : DashboardMessage()
     object SyncNetworkUnavailable : DashboardMessage()
     object SyncWifiRequired : DashboardMessage()
@@ -109,7 +111,19 @@ class DashboardViewModel(
         lastManualSyncAtMs = now
         viewModelScope.launch {
             _isSyncing.value = true
-            val result = syncRepository.syncPending(CallLogSyncTrigger.MANUAL)
+            val result = runCatching {
+                syncRepository.syncPending(CallLogSyncTrigger.MANUAL)
+            }.onFailure {
+                NetworkDiagnostics.logUnexpectedFailure("manual sync", it)
+            }.getOrElse {
+                _isSyncing.value = false
+                _message.value = Event(
+                    DashboardMessage.SyncError(
+                        it.message ?: "Unexpected sync failure"
+                    )
+                )
+                return@launch
+            }
             _isSyncing.value = false
 
             _message.value = Event(

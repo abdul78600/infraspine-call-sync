@@ -86,6 +86,14 @@ object NetworkDiagnostics {
         Log.w(TAG, "Upload connection failed: $category")
     }
 
+    fun logUnexpectedFailure(operation: String, throwable: Throwable) {
+        Log.e(
+            TAG,
+            "Unexpected failure during $operation: ${throwable::class.java.simpleName}: ${throwable.message ?: "<no message>"}",
+            throwable
+        )
+    }
+
     /**
      * Logs every field that goes into the multipart upload request, plus the final
      * resolved URL, but never the Authorization header/access token. Intended to make
