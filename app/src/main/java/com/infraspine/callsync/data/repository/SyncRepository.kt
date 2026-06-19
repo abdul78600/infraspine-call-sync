@@ -651,7 +651,6 @@ class SyncRepository(
 
             var uploaded = 0
             var serverDuplicateCount = 0
-            var completedMissing = 0
 
             for ((batchIndex, batch) in batches.withIndex()) {
                 val payload = batch.map { it.toSyncItem(deviceId) }
@@ -667,7 +666,7 @@ class SyncRepository(
                     api.syncCallLogs(CallLogsSyncRequest(logs = payload))
                 } catch (io: IOException) {
                     val message = NetworkDiagnostics.classify(throwable = io)
-                    val failed = CallLogSyncSupport.remainingCount(missing.size, completedMissing)
+                    val failed = CallLogSyncSupport.failedBatchCount(batch.size)
                     NetworkDiagnostics.logConnectionFailure(message)
                     NetworkDiagnostics.logCallLogSync(
                         fetched.size,
@@ -687,7 +686,7 @@ class SyncRepository(
 
                 if (!response.isSuccessful) {
                     val rawBody = runCatching { response.errorBody()?.string() }.getOrNull()
-                    val failed = CallLogSyncSupport.remainingCount(missing.size, completedMissing)
+                    val failed = CallLogSyncSupport.failedBatchCount(batch.size)
                     NetworkDiagnostics.logCallLogSyncResponse(response.code(), rawBody)
                     val serverMessage = UploadErrorParser.extractMessage(rawBody)
                     val requestError = NetworkDiagnostics.classify(httpCode = response.code(), serverMessage = serverMessage)
@@ -709,6 +708,24 @@ class SyncRepository(
                             failed = failed,
                             authRequired = true,
                             errorMessage = serverMessage
+                        )
+                    }
+
+                    if (response.code() == 403) {
+                        val permissionMessage = serverMessage ?: "Permission denied: crm.callLogs.create is required"
+                        NetworkDiagnostics.logCallLogSync(
+                            fetched.size,
+                            uploaded,
+                            skipped + skippedDuplicate + serverDuplicateCount,
+                            failed,
+                            queryCursor.lastSyncedAndroidCallLogId
+                        )
+                        return CallLogSyncStats(
+                            uploaded = uploaded,
+                            skipped = skipped,
+                            skippedDuplicate = skippedDuplicate + serverDuplicateCount,
+                            failed = failed,
+                            errorMessage = permissionMessage
                         )
                     }
 
@@ -735,9 +752,12 @@ class SyncRepository(
                 val body = response.body()
                 val rejected = CallLogSyncSupport.rejectedCount(body)
                 if (body?.success == false || rejected > 0) {
+                    val counts = CallLogSyncSupport.successCounts(body, fallbackBatchSize = 0)
+                    uploaded += counts.uploaded
+                    serverDuplicateCount += counts.duplicateCount
                     val message = body?.message
                         ?: "Server rejected $rejected call log(s) in batch ${batchIndex + 1}/${batches.size}"
-                    val failed = CallLogSyncSupport.remainingCount(missing.size, completedMissing)
+                    val failed = CallLogSyncSupport.failedBatchCount(batch.size, rejected)
                     NetworkDiagnostics.logCallLogSyncResponse(
                         200,
                         "success=${body?.success} invalid=${body?.invalid ?: 0} failed=${body?.failed ?: 0} message=$message"
@@ -762,7 +782,6 @@ class SyncRepository(
                 val counts = CallLogSyncSupport.successCounts(body, fallbackBatchSize = batch.size)
                 uploaded += counts.uploaded
                 serverDuplicateCount += counts.duplicateCount
-                completedMissing += batch.size
             }
 
             val totalSkippedDuplicate = skippedDuplicate + serverDuplicateCount
@@ -820,6 +839,10 @@ class SyncRepository(
                 when (response.code()) {
                     404, 501 -> return ExistenceCheckOutcome.NotSupported
                     401 -> return ExistenceCheckOutcome.Unauthorized
+                    403 -> return ExistenceCheckOutcome.Error(
+                        UploadErrorParser.extractMessage(rawBody)
+                            ?: "Permission denied: crm.callLogs.create is required"
+                    )
                     else -> {
                         val serverMessage = UploadErrorParser.extractMessage(rawBody)
                         return ExistenceCheckOutcome.Error(
@@ -876,6 +899,13 @@ class SyncRepository(
                 )
             }
             if (statusResponse.code() == 401) return SyncStateOutcome.Unauthorized
+            if (statusResponse.code() == 403) {
+                val rawBody = runCatching { statusResponse.errorBody()?.string() }.getOrNull()
+                return SyncStateOutcome.Error(
+                    UploadErrorParser.extractMessage(rawBody)
+                        ?: "Permission denied: crm.callLogs.create is required"
+                )
+            }
             if (statusResponse.code() != 404 && statusResponse.code() != 501) {
                 val rawBody = runCatching { statusResponse.errorBody()?.string() }.getOrNull()
                 val serverMessage = UploadErrorParser.extractMessage(rawBody)
@@ -893,6 +923,13 @@ class SyncRepository(
 
         if (!response.isSuccessful) {
             if (response.code() == 401) return SyncStateOutcome.Unauthorized
+            if (response.code() == 403) {
+                val rawBody = runCatching { response.errorBody()?.string() }.getOrNull()
+                return SyncStateOutcome.Error(
+                    UploadErrorParser.extractMessage(rawBody)
+                        ?: "Permission denied: crm.callLogs.create is required"
+                )
+            }
             val rawBody = runCatching { response.errorBody()?.string() }.getOrNull()
             val serverMessage = UploadErrorParser.extractMessage(rawBody)
             return SyncStateOutcome.Error(

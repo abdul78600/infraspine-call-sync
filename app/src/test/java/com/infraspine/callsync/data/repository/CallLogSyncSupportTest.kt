@@ -50,6 +50,7 @@ class CallLogSyncSupportTest {
     @Test
     fun shouldStopBatchSyncOn429() {
         assertTrue(CallLogSyncSupport.shouldStopBatchSync(429))
+        assertTrue(CallLogSyncSupport.shouldStopBatchSync(403))
         assertTrue(CallLogSyncSupport.shouldStopBatchSync(400))
         assertFalse(CallLogSyncSupport.shouldStopBatchSync(500))
     }
@@ -80,6 +81,13 @@ class CallLogSyncSupportTest {
         )
 
         assertEquals(5, CallLogSyncSupport.rejectedCount(response))
+    }
+
+    @Test
+    fun failedBatchCountCountsOnlyCurrentChunkOrRejectedRows() {
+        assertEquals(200, CallLogSyncSupport.failedBatchCount(batchSize = 200))
+        assertEquals(7, CallLogSyncSupport.failedBatchCount(batchSize = 200, rejectedCount = 7))
+        assertEquals(200, CallLogSyncSupport.failedBatchCount(batchSize = 200, rejectedCount = 250))
     }
 
     @Test

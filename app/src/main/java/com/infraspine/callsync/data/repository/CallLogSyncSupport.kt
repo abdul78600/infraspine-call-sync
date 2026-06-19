@@ -47,6 +47,9 @@ internal object CallLogSyncSupport {
     fun rejectedCount(response: CallLogsSyncResponse?): Int =
         (response?.invalid ?: 0) + (response?.failed ?: 0)
 
+    fun failedBatchCount(batchSize: Int, rejectedCount: Int = 0): Int =
+        if (rejectedCount > 0) rejectedCount.coerceAtMost(batchSize) else batchSize
+
     fun successCounts(
         response: CallLogsSyncResponse?,
         fallbackBatchSize: Int
@@ -85,7 +88,7 @@ internal object CallLogSyncSupport {
         (total - completed).coerceAtLeast(0)
 
     fun shouldStopBatchSync(httpCode: Int): Boolean =
-        httpCode == 400 || httpCode == 429
+        httpCode == 400 || httpCode == 403 || httpCode == 429
 
     fun shouldRunRecovery(
         trigger: CallLogSyncTrigger,
