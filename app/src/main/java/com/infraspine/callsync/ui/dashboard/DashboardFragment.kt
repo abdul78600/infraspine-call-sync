@@ -8,7 +8,6 @@ import android.view.ViewGroup
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.viewModels
-import androidx.navigation.NavOptions
 import androidx.navigation.fragment.findNavController
 import com.google.android.material.snackbar.Snackbar
 import com.infraspine.callsync.CallSyncApplication
@@ -190,13 +189,6 @@ class DashboardFragment : Fragment() {
             DashboardMessage.SyncWifiRequired -> getString(R.string.error_wifi_required)
             DashboardMessage.SyncApiNotConfigured -> getString(R.string.error_api_url_missing)
             DashboardMessage.SyncAuthRequired -> {
-                findNavController().navigate(
-                    R.id.loginFragment,
-                    null,
-                    NavOptions.Builder()
-                        .setPopUpTo(R.id.nav_graph, true)
-                        .build()
-                )
                 getString(R.string.error_auth_required)
             }
         }

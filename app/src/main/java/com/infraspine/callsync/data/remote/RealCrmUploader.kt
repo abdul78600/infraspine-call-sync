@@ -89,7 +89,6 @@ class RealCrmUploader(
                     NetworkDiagnostics.logUploadResponse(response.code(), rawBody)
                     val serverMessage = UploadErrorParser.extractMessage(rawBody)
                     if (response.code() == 401) {
-                        settingsStore.clearAuth()
                         UploadOutcome.Unauthorized
                     } else {
                         UploadOutcome.Failure(

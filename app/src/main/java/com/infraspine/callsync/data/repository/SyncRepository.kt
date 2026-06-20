@@ -210,7 +210,7 @@ class SyncRepository(
                 val profileKey = resolveProfileKey(deviceId, outcome.state.serverInstanceId)
                 settingsStore.setCallLogSyncState(profileKey, outcome.state)
             }
-            SyncStateOutcome.Unauthorized -> clearExpiredSession()
+            SyncStateOutcome.Unauthorized -> handleUnauthorizedSync()
             is SyncStateOutcome.Error -> NetworkDiagnostics.logConnectionFailure(outcome.message)
         }
     }
@@ -335,7 +335,7 @@ class SyncRepository(
                     // Endpoint not deployed yet — upload everything, as before.
                 }
                 ExistenceCheckOutcome.Unauthorized -> {
-                    clearExpiredSession()
+                    handleUnauthorizedSync()
                     return RecordingSyncStats(authRequired = true)
                 }
                 is ExistenceCheckOutcome.Error -> {
@@ -375,7 +375,7 @@ class SyncRepository(
                     failedCount++
                 }
                 UploadOutcome.Unauthorized -> {
-                    clearExpiredSession()
+                    handleUnauthorizedSync()
                     return RecordingSyncStats(
                         uploaded = uploaded,
                         failed = failedCount,
@@ -479,7 +479,7 @@ class SyncRepository(
                         settingsStore.setCallLogSyncState(profileKey, outcome.state)
                     }
                     SyncStateOutcome.Unauthorized -> {
-                        clearExpiredSession()
+                        handleUnauthorizedSync()
                         return CallLogSyncStats(authRequired = true)
                     }
                     is SyncStateOutcome.Error -> syncStateError = outcome.message
@@ -605,7 +605,7 @@ class SyncRepository(
                     // Endpoint not deployed yet — upload everything, as before.
                 }
                 ExistenceCheckOutcome.Unauthorized -> {
-                    clearExpiredSession()
+                    handleUnauthorizedSync()
                     NetworkDiagnostics.logCallLogSync(
                         fetched.size,
                         0,
@@ -693,7 +693,7 @@ class SyncRepository(
                     NetworkDiagnostics.logConnectionFailure(requestError)
 
                     if (response.code() == 401) {
-                        clearExpiredSession()
+                        handleUnauthorizedSync()
                         NetworkDiagnostics.logCallLogSync(
                             fetched.size,
                             uploaded,
@@ -1132,13 +1132,9 @@ class SyncRepository(
     private fun String.toEpochMillisOrZero(): Long =
         toLongOrNull() ?: runCatching { Instant.parse(this).toEpochMilli() }.getOrDefault(0L)
 
-    private fun clearExpiredSession() {
-        settingsStore.clearAuth()
-        settingsStore.autoSyncEnabled = false
-        SyncScheduler.apply(
-            context = context.applicationContext,
-            autoSyncEnabled = false,
-            wifiOnly = settingsStore.syncOnWifiOnly
+    private fun handleUnauthorizedSync() {
+        NetworkDiagnostics.logCallLogSyncSkipped(
+            "server returned unauthorized; keeping local session until manual logout"
         )
     }
 

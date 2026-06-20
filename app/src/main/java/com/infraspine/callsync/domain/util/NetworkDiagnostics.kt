@@ -54,7 +54,7 @@ object NetworkDiagnostics {
         if (httpCode != null) {
             val message = serverMessage?.takeIf { it.isNotBlank() }
             return when (httpCode) {
-                401 -> message ?: "Unauthorized — please log in to CRM again"
+                401 -> message ?: "Unauthorized - sync was rejected, but your app session was kept"
                 403 -> message ?: "Forbidden — this device is not allowed to upload"
                 400 -> message ?: "Server rejected the upload (400) — no validation details returned"
                 else -> if (message != null) "Server responded with $httpCode: $message" else "Server responded with $httpCode"

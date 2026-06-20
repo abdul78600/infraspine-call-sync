@@ -113,7 +113,7 @@
     <string name="error_upload_failed">Upload failed</string>
     <string name="error_network_unavailable">Network unavailable. Will retry later.</string>
     <string name="error_api_url_missing">CRM server URL is not configured. Recordings remain pending.</string>
-    <string name="error_auth_required">Please log in to CRM again before syncing.</string>
+    <string name="error_auth_required">CRM sync was unauthorized. Your app session was kept; use Logout only if you want to sign in again.</string>
     <string name="error_wifi_required">Sync is restricted to Wi-Fi. Connect to Wi-Fi and try again.</string>
     <string name="permission_required_title">Permission required</string>
     <string name="permission_call_log_rationale">InfraSpine Recordings needs Call Log access to match recordings with phone calls (number, time, duration, type).</string>
