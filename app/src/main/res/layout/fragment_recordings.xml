@@ -7,72 +7,144 @@
     android:background="@color/background"
     android:orientation="vertical">
 
-    <com.google.android.material.textfield.TextInputLayout
-        android:id="@+id/layoutSearch"
-        style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox"
+    <!-- Search + Filter Header Card -->
+    <androidx.cardview.widget.CardView
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginHorizontal="@dimen/spacing_md"
-        android:layout_marginTop="@dimen/spacing_md"
-        android:hint="@string/search_recordings_hint"
-        app:startIconDrawable="@android:drawable/ic_menu_search"
-        app:endIconMode="clear_text">
+        app:cardBackgroundColor="@color/surface"
+        app:cardCornerRadius="0dp"
+        app:cardElevation="3dp">
 
-        <com.google.android.material.textfield.TextInputEditText
-            android:id="@+id/editSearch"
+        <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:inputType="text"
-            android:singleLine="true"
-            android:imeOptions="actionSearch" />
-    </com.google.android.material.textfield.TextInputLayout>
+            android:orientation="vertical"
+            android:paddingTop="14dp"
+            android:paddingBottom="10dp">
 
-    <com.google.android.material.chip.ChipGroup
-        android:id="@+id/chipGroupFilter"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_margin="@dimen/spacing_md"
-        app:singleSelection="true"
-        app:chipSpacingHorizontal="8dp">
+            <!-- Search + Sort row -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="16dp"
+                android:layout_marginEnd="8dp"
+                android:orientation="horizontal"
+                android:gravity="center_vertical">
 
-        <com.google.android.material.chip.Chip
-            android:id="@+id/chipAll"
-            style="@style/Widget.MaterialComponents.Chip.Choice"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:checked="true"
-            android:text="@string/filter_all" />
+            <com.google.android.material.textfield.TextInputLayout
+                android:id="@+id/layoutSearch"
+                style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox.Dense"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:hint="@string/search_recordings_hint"
+                app:boxCornerRadiusTopStart="24dp"
+                app:boxCornerRadiusTopEnd="24dp"
+                app:boxCornerRadiusBottomStart="24dp"
+                app:boxCornerRadiusBottomEnd="24dp"
+                app:boxBackgroundColor="@color/surface"
+                app:boxStrokeColor="@color/search_stroke"
+                app:boxStrokeWidth="1dp"
+                app:boxStrokeWidthFocused="1.5dp"
+                app:startIconDrawable="@drawable/ic_search"
+                app:startIconTint="@color/text_secondary"
+                app:endIconMode="clear_text"
+                app:endIconTint="@color/text_secondary"
+                app:hintTextColor="@color/text_secondary"
+                app:hintTextAppearance="@style/SearchHintText">
 
-        <com.google.android.material.chip.Chip
-            android:id="@+id/chipPending"
-            style="@style/Widget.MaterialComponents.Chip.Choice"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="@string/filter_pending" />
+                <com.google.android.material.textfield.TextInputEditText
+                    android:id="@+id/editSearch"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:inputType="text"
+                    android:singleLine="true"
+                    android:imeOptions="actionSearch"
+                    android:textSize="14sp"
+                    android:textColor="@color/text_primary"
+                    android:background="@null" />
+            </com.google.android.material.textfield.TextInputLayout>
 
-        <com.google.android.material.chip.Chip
-            android:id="@+id/chipSynced"
-            style="@style/Widget.MaterialComponents.Chip.Choice"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="@string/filter_synced" />
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/buttonSort"
+                style="@style/Widget.MaterialComponents.Button.TextButton"
+                android:layout_width="40dp"
+                android:layout_height="40dp"
+                android:layout_marginStart="4dp"
+                android:minWidth="0dp"
+                android:minHeight="0dp"
+                android:insetTop="0dp"
+                android:insetBottom="0dp"
+                android:padding="8dp"
+                android:contentDescription="Sort"
+                app:icon="@drawable/ic_sort"
+                app:iconPadding="0dp"
+                app:iconSize="22dp"
+                app:iconTint="@color/text_secondary" />
 
-        <com.google.android.material.chip.Chip
-            android:id="@+id/chipFailed"
-            style="@style/Widget.MaterialComponents.Chip.Choice"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="@string/filter_failed" />
+            </LinearLayout>
 
-        <com.google.android.material.chip.Chip
-            android:id="@+id/chipUnmatched"
-            style="@style/Widget.MaterialComponents.Chip.Choice"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="@string/filter_unmatched" />
+            <!-- Filter Chips Row -->
+            <HorizontalScrollView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="10dp"
+                android:layout_marginStart="16dp"
+                android:scrollbars="none"
+                android:overScrollMode="never"
+                android:requiresFadingEdge="horizontal"
+                android:fadingEdgeLength="32dp">
 
-    </com.google.android.material.chip.ChipGroup>
+                <com.google.android.material.chip.ChipGroup
+                    android:id="@+id/chipGroupFilter"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    app:singleSelection="true"
+                    app:chipSpacingHorizontal="6dp">
 
+                    <com.google.android.material.chip.Chip
+                        android:id="@+id/chipAll"
+                        style="@style/FilterChip.All"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:checked="true"
+                        android:text="@string/filter_all" />
+
+                    <com.google.android.material.chip.Chip
+                        android:id="@+id/chipPending"
+                        style="@style/FilterChip.Pending"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="@string/filter_pending" />
+
+                    <com.google.android.material.chip.Chip
+                        android:id="@+id/chipSynced"
+                        style="@style/FilterChip.Synced"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="@string/filter_synced" />
+
+                    <com.google.android.material.chip.Chip
+                        android:id="@+id/chipFailed"
+                        style="@style/FilterChip.Failed"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="@string/filter_failed" />
+
+                    <com.google.android.material.chip.Chip
+                        android:id="@+id/chipUnmatched"
+                        style="@style/FilterChip.Unmatched"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="@string/filter_unmatched" />
+
+                </com.google.android.material.chip.ChipGroup>
+            </HorizontalScrollView>
+
+        </LinearLayout>
+    </androidx.cardview.widget.CardView>
+
+    <!-- List -->
     <FrameLayout
         android:layout_width="match_parent"
         android:layout_height="0dp"
@@ -83,6 +155,7 @@
             android:layout_width="match_parent"
             android:layout_height="match_parent"
             android:clipToPadding="false"
+            android:paddingTop="8dp"
             android:paddingBottom="@dimen/spacing_md"
             tools:listitem="@layout/item_recording" />
 

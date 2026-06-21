@@ -1,6 +1,5 @@
 package com.infraspine.callsync.ui.settings
 
-import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
 import android.view.LayoutInflater
@@ -13,6 +12,7 @@ import androidx.navigation.NavOptions
 import androidx.navigation.fragment.findNavController
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.snackbar.Snackbar
+import com.infraspine.callsync.update.AppUpdater
 import com.infraspine.callsync.CallSyncApplication
 import com.infraspine.callsync.R
 import com.infraspine.callsync.databinding.FragmentSettingsBinding
@@ -142,7 +142,9 @@ class SettingsFragment : Fragment() {
                     " — " + getString(R.string.update_available_message)
                 binding.buttonDownloadUpdate.visibility = View.VISIBLE
                 binding.buttonDownloadUpdate.setOnClickListener {
-                    openDownloadPage(result.downloadUrl)
+                    binding.buttonDownloadUpdate.isEnabled = false
+                    binding.buttonDownloadUpdate.text = getString(R.string.checking_for_updates)
+                    AppUpdater.downloadAndInstall(requireContext().applicationContext, result.downloadUrl)
                 }
             }
 
@@ -159,11 +161,7 @@ class SettingsFragment : Fragment() {
     }
 
     private fun openDownloadPage(url: String) {
-        runCatching {
-            startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
-        }.onFailure {
-            Snackbar.make(binding.root, getString(R.string.update_check_failed, url), Snackbar.LENGTH_LONG).show()
-        }
+        AppUpdater.downloadAndInstall(requireContext().applicationContext, url)
     }
 
     private fun saveSettings() {

@@ -6,17 +6,20 @@ import androidx.room.Room
 import androidx.room.RoomDatabase
 import androidx.room.TypeConverters
 import com.infraspine.callsync.data.local.dao.RecordingDao
+import com.infraspine.callsync.data.local.dao.SyncHistoryDao
 import com.infraspine.callsync.data.local.entity.RecordingEntity
+import com.infraspine.callsync.data.local.entity.SyncHistoryEntity
 
 @Database(
-    entities = [RecordingEntity::class],
-    version = 2,
+    entities = [RecordingEntity::class, SyncHistoryEntity::class],
+    version = 3,
     exportSchema = false
 )
 @TypeConverters(Converters::class)
 abstract class CallSyncDatabase : RoomDatabase() {
 
     abstract fun recordingDao(): RecordingDao
+    abstract fun syncHistoryDao(): SyncHistoryDao
 
     companion object {
         private const val DB_NAME = "callsync.db"
@@ -30,7 +33,7 @@ abstract class CallSyncDatabase : RoomDatabase() {
                     context.applicationContext,
                     CallSyncDatabase::class.java,
                     DB_NAME
-                ).addMigrations(MIGRATION_1_2).build().also { instance = it }
+                ).addMigrations(MIGRATION_1_2, MIGRATION_2_3).build().also { instance = it }
             }
     }
 }

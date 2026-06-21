@@ -19,7 +19,6 @@
         <item name="cardBackgroundColor">@color/surface</item>
         <item name="cardCornerRadius">@dimen/card_radius</item>
         <item name="cardElevation">2dp</item>
-        <item name="contentPadding">16dp</item>
     </style>
 
     <style name="StatValue">
@@ -31,5 +30,50 @@
     <style name="StatLabel">
         <item name="android:textSize">13sp</item>
         <item name="android:textColor">@color/text_secondary</item>
+    </style>
+
+    <style name="SearchHintText" parent="TextAppearance.MaterialComponents.Caption">
+        <item name="android:textSize">14sp</item>
+        <item name="android:textColor">@color/text_secondary</item>
+    </style>
+
+    <style name="FilterChip.Base" parent="Widget.MaterialComponents.Chip.Choice">
+        <item name="android:textSize">11sp</item>
+        <item name="chipStrokeWidth">1dp</item>
+        <item name="chipMinHeight">26dp</item>
+        <item name="chipStartPadding">6dp</item>
+        <item name="chipEndPadding">6dp</item>
+        <item name="textStartPadding">4dp</item>
+        <item name="textEndPadding">4dp</item>
+    </style>
+
+    <style name="FilterChip.All" parent="FilterChip.Base">
+        <item name="chipBackgroundColor">@color/chip_bg_all</item>
+        <item name="chipStrokeColor">@color/chip_stroke_all</item>
+        <item name="android:textColor">@color/chip_text_all</item>
+    </style>
+
+    <style name="FilterChip.Pending" parent="FilterChip.Base">
+        <item name="chipBackgroundColor">@color/chip_bg_pending</item>
+        <item name="chipStrokeColor">@color/chip_stroke_pending</item>
+        <item name="android:textColor">@color/chip_text_pending</item>
+    </style>
+
+    <style name="FilterChip.Synced" parent="FilterChip.Base">
+        <item name="chipBackgroundColor">@color/chip_bg_synced</item>
+        <item name="chipStrokeColor">@color/chip_stroke_synced</item>
+        <item name="android:textColor">@color/chip_text_synced</item>
+    </style>
+
+    <style name="FilterChip.Failed" parent="FilterChip.Base">
+        <item name="chipBackgroundColor">@color/chip_bg_failed</item>
+        <item name="chipStrokeColor">@color/chip_stroke_failed</item>
+        <item name="android:textColor">@color/chip_text_failed</item>
+    </style>
+
+    <style name="FilterChip.Unmatched" parent="FilterChip.Base">
+        <item name="chipBackgroundColor">@color/chip_bg_unmatched</item>
+        <item name="chipStrokeColor">@color/chip_stroke_unmatched</item>
+        <item name="android:textColor">@color/chip_text_unmatched</item>
     </style>
 </resources>

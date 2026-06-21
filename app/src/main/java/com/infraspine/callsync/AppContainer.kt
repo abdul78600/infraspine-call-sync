@@ -63,9 +63,13 @@ class AppContainer(private val context: Context) {
             networkMonitor = networkMonitor,
             apiFactory = apiFactory,
             callLogReader = mobileCallLogReader,
-            hasCallLogPermission = { hasCallLogPermission() }
+            hasCallLogPermission = { hasCallLogPermission() },
+            syncHistoryDao = database.syncHistoryDao(),
+            authRepository = authRepository
         )
     }
+
+    val syncHistoryDao get() = database.syncHistoryDao()
 
     val callHistoryRepository: CallHistoryRepository by lazy {
         CallHistoryRepository(

@@ -30,6 +30,41 @@
                 android:layout_height="wrap_content"
                 android:orientation="vertical">
 
+                <!-- Search Field -->
+                <com.google.android.material.textfield.TextInputLayout
+                    android:id="@+id/layoutSearchHistory"
+                    style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox.Dense"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginBottom="@dimen/spacing_sm"
+                    android:hint="Search by phone number"
+                    app:boxCornerRadiusTopStart="24dp"
+                    app:boxCornerRadiusTopEnd="24dp"
+                    app:boxCornerRadiusBottomStart="24dp"
+                    app:boxCornerRadiusBottomEnd="24dp"
+                    app:boxBackgroundColor="@color/surface"
+                    app:boxStrokeColor="@color/search_stroke"
+                    app:boxStrokeWidth="1dp"
+                    app:boxStrokeWidthFocused="1.5dp"
+                    app:startIconDrawable="@drawable/ic_search"
+                    app:startIconTint="@color/text_secondary"
+                    app:endIconMode="clear_text"
+                    app:endIconTint="@color/text_secondary"
+                    app:hintTextColor="@color/text_secondary"
+                    app:hintTextAppearance="@style/SearchHintText">
+
+                    <com.google.android.material.textfield.TextInputEditText
+                        android:id="@+id/editSearchHistory"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:inputType="phone"
+                        android:singleLine="true"
+                        android:imeOptions="actionSearch"
+                        android:textSize="14sp"
+                        android:textColor="@color/text_primary"
+                        android:background="@null" />
+                </com.google.android.material.textfield.TextInputLayout>
+
                 <TextView
                     android:id="@+id/textLoadedSummary"
                     android:layout_width="wrap_content"

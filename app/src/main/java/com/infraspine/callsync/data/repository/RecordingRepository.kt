@@ -1,5 +1,6 @@
 package com.infraspine.callsync.data.repository
 
+import androidx.sqlite.db.SimpleSQLiteQuery
 import com.infraspine.callsync.data.local.dao.RecordingDao
 import com.infraspine.callsync.data.local.entity.RecordingEntity
 import com.infraspine.callsync.domain.model.CallType
@@ -7,6 +8,7 @@ import com.infraspine.callsync.domain.model.SyncStatus
 import com.infraspine.callsync.scan.CallLogMatcher
 import com.infraspine.callsync.scan.RecordingFolderManager
 import com.infraspine.callsync.scan.RecordingScanner
+import com.infraspine.callsync.ui.recordings.RecordingSortOrder
 import kotlinx.coroutines.flow.Flow
 
 sealed class ScanResult {
@@ -40,18 +42,39 @@ class RecordingRepository(
      * Observes recordings matching [searchQuery] (file name or phone number, case-insensitive
      * substring) and optionally [status]. Pass a blank query to fall back to the unfiltered list.
      */
-    fun observeFiltered(status: SyncStatus?, searchQuery: String): Flow<List<RecordingEntity>> {
+    fun observeFiltered(
+        status: SyncStatus?,
+        searchQuery: String,
+        sortOrder: RecordingSortOrder = RecordingSortOrder.DATE_DESC
+    ): Flow<List<RecordingEntity>> {
         val trimmed = searchQuery.trim()
-        if (trimmed.isEmpty()) {
-            return if (status == null) observeAll() else observeByStatus(status)
+        val orderBy = sortOrder.sql
+
+        // Fast path: use pre-compiled queries when no custom sort is needed
+        if (sortOrder == RecordingSortOrder.DATE_DESC) {
+            if (trimmed.isEmpty()) {
+                return if (status == null) observeAll() else observeByStatus(status)
+            }
+            val likePattern = "%${trimmed.replace("%", "\\%").replace("_", "\\_")}%"
+            return if (status == null) dao.observeBySearch(likePattern)
+            else dao.observeByStatusAndSearch(status, likePattern)
         }
 
-        val likePattern = "%${trimmed.replace("%", "\\%").replace("_", "\\_")}%"
-        return if (status == null) {
-            dao.observeBySearch(likePattern)
-        } else {
-            dao.observeByStatusAndSearch(status, likePattern)
+        // Dynamic query for custom sort orders
+        val args = mutableListOf<Any>()
+        val sb = StringBuilder("SELECT * FROM recordings WHERE 1=1")
+        if (status != null) {
+            sb.append(" AND syncStatus = ?")
+            args.add(status.name)
         }
+        if (trimmed.isNotEmpty()) {
+            val like = "%${trimmed.replace("%", "\\%").replace("_", "\\_")}%"
+            sb.append(" AND (fileName LIKE ? OR phoneNumber LIKE ?)")
+            args.add(like)
+            args.add(like)
+        }
+        sb.append(" ORDER BY $orderBy")
+        return dao.observeRaw(SimpleSQLiteQuery(sb.toString(), args.toTypedArray()))
     }
 
     fun observeTotalCount(): Flow<Int> = dao.observeTotalCount()

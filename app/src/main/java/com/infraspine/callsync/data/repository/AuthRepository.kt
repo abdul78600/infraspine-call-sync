@@ -51,12 +51,25 @@ class AuthRepository(
             settingsStore.userId = body.user?.id ?: body.user?.userId ?: body.userId
             settingsStore.userName = body.user?.name ?: body.name
             settingsStore.userEmail = body.user?.email ?: body.email ?: normalizedEmail
+            settingsStore.savedPassword = password  // stored encrypted for silent auto re-login
             settingsStore.dummyTestMode = false
 
             LoginResult.Success
         } catch (io: IOException) {
             LoginResult.Failure(NetworkDiagnostics.classify(throwable = io))
         }
+    }
+
+    /**
+     * Silently re-logs in using saved credentials when the server returns 401.
+     * Returns true if a fresh token was obtained — the next sync will proceed normally.
+     * Returns false if credentials are missing or the server rejects them.
+     */
+    suspend fun autoReLogin(): Boolean {
+        val url = settingsStore.crmServerUrl ?: return false
+        val email = settingsStore.userEmail ?: return false
+        val password = settingsStore.savedPassword ?: return false
+        return login(url, email, password) is LoginResult.Success
     }
 
     fun logout() {

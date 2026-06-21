@@ -26,13 +26,18 @@ class CallHistoryRepository(
 ) {
     suspend fun loadRecentCallHistory(
         limit: Int?,
-        dateRange: CallLogDateRange? = null
+        dateRange: CallLogDateRange? = null,
+        phoneQuery: String? = null
     ): List<CallHistoryEntry> = withContext(Dispatchers.IO) {
         val entries = callLogMatcher.loadRecentCallLog(limit, dateRange)
         if (entries.isEmpty()) return@withContext emptyList()
 
         val matchedTimestamps = dao.getMatchedCallStartTimestamps().toSet()
-        entries.map { entry -> entry.toCallHistoryEntry(matchedTimestamps) }
+        entries
+            .filter { entry ->
+                phoneQuery == null || entry.phoneNumber?.contains(phoneQuery, ignoreCase = true) == true
+            }
+            .map { entry -> entry.toCallHistoryEntry(matchedTimestamps) }
     }
 
     /**

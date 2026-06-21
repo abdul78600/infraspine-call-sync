@@ -4,7 +4,9 @@ import androidx.room.Dao
 import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
+import androidx.room.RawQuery
 import androidx.room.Update
+import androidx.sqlite.db.SupportSQLiteQuery
 import com.infraspine.callsync.data.local.entity.RecordingEntity
 import com.infraspine.callsync.domain.model.CallType
 import com.infraspine.callsync.domain.model.SyncStatus
@@ -56,6 +58,9 @@ interface RecordingDao {
            ORDER BY callStartedAt DESC, lastModified DESC"""
     )
     fun observeByStatusAndSearch(status: SyncStatus, query: String): Flow<List<RecordingEntity>>
+
+    @RawQuery(observedEntities = [RecordingEntity::class])
+    fun observeRaw(query: SupportSQLiteQuery): Flow<List<RecordingEntity>>
 
     @Query("SELECT * FROM recordings WHERE syncStatus = :status")
     suspend fun getByStatus(status: SyncStatus): List<RecordingEntity>

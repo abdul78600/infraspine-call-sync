@@ -44,7 +44,8 @@ data class CallHistoryDisplayState(
     val selectedLimit: CallHistoryLimitOption = DEFAULT_CALL_HISTORY_LIMIT,
     val loadedItems: Int = 0,
     val allLoaded: Boolean = false,
-    val selectedDateRange: CallHistorySelectedDateRange? = null
+    val selectedDateRange: CallHistorySelectedDateRange? = null,
+    val searchQuery: String = ""
 )
 
 class CallHistoryViewModel(
@@ -103,6 +104,13 @@ class CallHistoryViewModel(
         refresh()
     }
 
+    fun setSearchQuery(query: String) {
+        val current = _displayState.value ?: CallHistoryDisplayState()
+        if (current.searchQuery == query) return
+        _displayState.value = current.copy(searchQuery = query)
+        refresh()
+    }
+
     fun selectedLimitLabel(): String = (_displayState.value?.selectedLimit ?: DEFAULT_CALL_HISTORY_LIMIT).label
 
     private fun loadCalls() {
@@ -111,6 +119,7 @@ class CallHistoryViewModel(
         val currentState = _displayState.value ?: CallHistoryDisplayState()
         val selectedLimit = currentState.selectedLimit
         val selectedDateRange = currentState.selectedDateRange
+        val searchQuery = currentState.searchQuery.trim()
         loadJob = viewModelScope.launch {
             _isLoading.value = true
 
@@ -122,7 +131,8 @@ class CallHistoryViewModel(
                             startAtInclusive = it.startAtInclusive,
                             endAtInclusive = it.endAtInclusive
                         )
-                    }
+                    },
+                    phoneQuery = searchQuery.ifBlank { null }
                 )
             }
                 .onSuccess { calls ->
@@ -132,7 +142,8 @@ class CallHistoryViewModel(
                         selectedLimit = selectedLimit,
                         loadedItems = calls.size,
                         allLoaded = selectedLimit.limit == null,
-                        selectedDateRange = selectedDateRange
+                        selectedDateRange = selectedDateRange,
+                        searchQuery = searchQuery
                     )
                 }
                 .onFailure { error ->

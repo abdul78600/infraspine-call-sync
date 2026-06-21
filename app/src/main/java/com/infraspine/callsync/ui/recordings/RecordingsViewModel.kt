@@ -11,7 +11,11 @@ import com.infraspine.callsync.AppContainer
 import com.infraspine.callsync.data.local.entity.RecordingEntity
 import com.infraspine.callsync.data.repository.RecordingRepository
 
-private data class RecordingsQuery(val filter: RecordingFilter, val searchQuery: String)
+private data class RecordingsQuery(
+    val filter: RecordingFilter,
+    val searchQuery: String,
+    val sortOrder: RecordingSortOrder
+)
 
 class RecordingsViewModel(
     private val recordingRepository: RecordingRepository
@@ -23,41 +27,41 @@ class RecordingsViewModel(
     private val _searchQuery = MutableLiveData("")
     val searchQuery: LiveData<String> = _searchQuery
 
-    /**
-     * Merges the status filter and search text into one key so a single
-     * [RecordingRepository.observeFiltered] flow drives the list — avoids running
-     * separate "search" and "filter" queries that would race and overwrite each other.
-     */
+    private val _sortOrder = MutableLiveData(RecordingSortOrder.DATE_DESC)
+    val sortOrder: LiveData<RecordingSortOrder> = _sortOrder
+
     private val query = MediatorLiveData<RecordingsQuery>().apply {
         fun emit() {
-            val filter = _filter.value ?: RecordingFilter.ALL
-            val search = _searchQuery.value ?: ""
-            value = RecordingsQuery(filter, search)
+            value = RecordingsQuery(
+                filter = _filter.value ?: RecordingFilter.ALL,
+                searchQuery = _searchQuery.value ?: "",
+                sortOrder = _sortOrder.value ?: RecordingSortOrder.DATE_DESC
+            )
         }
         addSource(_filter) { emit() }
         addSource(_searchQuery) { emit() }
+        addSource(_sortOrder) { emit() }
     }
 
-    val recordings: LiveData<List<RecordingEntity>> = query.switchMap { (filter, search) ->
-        recordingRepository.observeFiltered(filter.status, search).asLiveData()
+    val recordings: LiveData<List<RecordingEntity>> = query.switchMap { (filter, search, sort) ->
+        recordingRepository.observeFiltered(filter.status, search, sort).asLiveData()
     }
 
     fun setFilter(filter: RecordingFilter) {
-        if (_filter.value != filter) {
-            _filter.value = filter
-        }
+        if (_filter.value != filter) _filter.value = filter
     }
 
     fun setSearchQuery(query: String) {
-        if (_searchQuery.value != query) {
-            _searchQuery.value = query
-        }
+        if (_searchQuery.value != query) _searchQuery.value = query
+    }
+
+    fun setSortOrder(order: RecordingSortOrder) {
+        if (_sortOrder.value != order) _sortOrder.value = order
     }
 
     class Factory(private val container: AppContainer) : ViewModelProvider.Factory {
         @Suppress("UNCHECKED_CAST")
-        override fun <T : ViewModel> create(modelClass: Class<T>): T {
-            return RecordingsViewModel(container.recordingRepository) as T
-        }
+        override fun <T : ViewModel> create(modelClass: Class<T>): T =
+            RecordingsViewModel(container.recordingRepository) as T
     }
 }

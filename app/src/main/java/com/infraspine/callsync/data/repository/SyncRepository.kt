@@ -36,6 +36,8 @@ import com.infraspine.callsync.sync.SyncScheduler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 import java.io.IOException
 import java.time.Instant
@@ -117,8 +119,13 @@ class SyncRepository(
     private val networkMonitor: NetworkMonitor,
     private val apiFactory: CrmApiFactory,
     private val callLogReader: MobileCallLogReader,
-    private val hasCallLogPermission: () -> Boolean
+    private val hasCallLogPermission: () -> Boolean,
+    private val syncHistoryDao: com.infraspine.callsync.data.local.dao.SyncHistoryDao? = null,
+    private val authRepository: AuthRepository? = null
 ) {
+    private val _syncProgress = MutableStateFlow<SyncProgress?>(null)
+    val syncProgress: StateFlow<SyncProgress?> = _syncProgress
+
     @Volatile
     private var lastAppOpenSyncAttemptAt: Long = 0L
 
@@ -131,6 +138,8 @@ class SyncRepository(
     }
 
     suspend fun syncPending(trigger: CallLogSyncTrigger = CallLogSyncTrigger.PERIODIC): SyncResult {
+        _syncProgress.value = null
+
         if (settingsStore.crmServerUrl.isNullOrBlank()) {
             return SyncResult.ApiNotConfigured
         }
@@ -164,6 +173,21 @@ class SyncRepository(
             callLogResult.skippedDuplicate > 0 ||
             callLogResult.failed > 0 ||
             !callLogResult.errorMessage.isNullOrBlank()
+
+        if (didWork) {
+            syncHistoryDao?.let {
+                val entry = com.infraspine.callsync.data.local.entity.SyncHistoryEntity(
+                    syncedAt = System.currentTimeMillis(),
+                    recordingsUploaded = recordingResult.uploaded,
+                    recordingsFailed = recordingResult.failed,
+                    recordingsSkipped = recordingResult.skippedDuplicate,
+                    callLogsUploaded = callLogResult.uploaded,
+                    callLogsFailed = callLogResult.failed
+                )
+                it.insert(entry)
+                it.trimToLatest100()
+            }
+        }
 
         return if (didWork) {
             SyncResult.Completed(
@@ -349,7 +373,11 @@ class SyncRepository(
         var uploaded = 0
         var failedCount = 0
 
-        for (recording in candidates) {
+        _syncProgress.value = SyncProgress(current = 0, total = candidates.size)
+
+        for ((index, recording) in candidates.withIndex()) {
+            _syncProgress.value = SyncProgress(current = index, total = candidates.size)
+
             if (!networkMonitor.isConnected()) break
             if (settingsStore.syncOnWifiOnly && !networkMonitor.isOnWifi()) break
 
@@ -386,6 +414,7 @@ class SyncRepository(
             }
         }
 
+        _syncProgress.value = null
         return RecordingSyncStats(uploaded = uploaded, failed = failedCount, skippedDuplicate = skippedDuplicate)
     }
 
@@ -430,7 +459,7 @@ class SyncRepository(
                 }
             }
 
-            response.body()?.existing?.let { existing += it }
+            existing += parseCheckExistingRefs(response.body()?.existing)
         }
 
         return ExistenceCheckOutcome.Available(existing)
@@ -1132,10 +1161,16 @@ class SyncRepository(
     private fun String.toEpochMillisOrZero(): Long =
         toLongOrNull() ?: runCatching { Instant.parse(this).toEpochMilli() }.getOrDefault(0L)
 
-    private fun handleUnauthorizedSync() {
+    private suspend fun handleUnauthorizedSync() {
         NetworkDiagnostics.logCallLogSyncSkipped(
-            "server returned unauthorized; keeping local session until manual logout"
+            "server returned 401; attempting silent re-login"
         )
+        val reloggedIn = authRepository?.autoReLogin() ?: false
+        if (reloggedIn) {
+            NetworkDiagnostics.logCallLogSyncSkipped("silent re-login succeeded — next sync will use fresh token")
+        } else {
+            NetworkDiagnostics.logCallLogSyncSkipped("silent re-login failed — credentials missing or invalid")
+        }
     }
 
     companion object {

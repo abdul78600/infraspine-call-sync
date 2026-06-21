@@ -4,14 +4,18 @@ import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import androidx.core.content.ContextCompat
 import androidx.core.os.bundleOf
+import androidx.core.view.isVisible
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.viewModels
-import com.google.android.material.slider.Slider
 import com.google.android.material.snackbar.Snackbar
 import com.infraspine.callsync.CallSyncApplication
 import com.infraspine.callsync.R
 import com.infraspine.callsync.databinding.FragmentPlayerBinding
+import com.infraspine.callsync.domain.model.SyncStatus
+import com.infraspine.callsync.ui.common.colorRes
+import com.infraspine.callsync.ui.common.displayLabel
 import com.infraspine.callsync.ui.common.orUnmatched
 import com.infraspine.callsync.ui.common.toDisplayDateTime
 import com.infraspine.callsync.ui.common.toDisplayDuration
@@ -29,7 +33,7 @@ class PlayerFragment : Fragment() {
         PlayerViewModel.Factory(requireContext(), recordingId, container)
     }
 
-    private var isUserSeeking = false
+    private var isDragging = false
 
     override fun onCreateView(
         inflater: LayoutInflater,
@@ -51,19 +55,21 @@ class PlayerFragment : Fragment() {
         binding.buttonSkipForward.setOnClickListener { viewModel.seekBy(SKIP_INTERVAL_MS) }
         binding.buttonPlaybackSpeed.setOnClickListener { viewModel.cyclePlaybackSpeed() }
 
-        binding.sliderProgress.addOnSliderTouchListener(object : Slider.OnSliderTouchListener {
-            override fun onStartTrackingTouch(slider: Slider) {
-                isUserSeeking = true
-            }
+        binding.waveformView.onSeek = { fraction ->
+            isDragging = true
+            val durationMs = viewModel.durationMs.value ?: 0
+            viewModel.seekTo((fraction * durationMs).toInt())
+            isDragging = false
+        }
 
-            override fun onStopTrackingTouch(slider: Slider) {
-                isUserSeeking = false
-                viewModel.seekTo(slider.value.toInt())
-            }
-        })
+        viewModel.waveform.observe(viewLifecycleOwner) { data ->
+            binding.waveformView.setAmplitudes(data)
+        }
 
         viewModel.recording.observe(viewLifecycleOwner) { recording ->
             if (recording == null) return@observe
+
+            viewModel.loadWaveform(recording.fileUri)  // no-op if same URI already decoded
 
             binding.textFileName.text = recording.fileName
             binding.textPhoneNumber.text = recording.phoneNumber.orUnmatched(requireContext())
@@ -74,6 +80,26 @@ class PlayerFragment : Fragment() {
                     recording.durationSeconds.toDisplayDuration()
             } else {
                 recording.lastModified.toDisplayDateTime()
+            }
+
+            val statusColor = ContextCompat.getColor(requireContext(), recording.syncStatus.colorRes())
+            binding.textSyncStatusBadge.text = recording.syncStatus.displayLabel(requireContext())
+            binding.textSyncStatusBadge.backgroundTintList =
+                android.content.res.ColorStateList.valueOf(statusColor)
+
+            val isFailed = recording.syncStatus == SyncStatus.FAILED
+            binding.layoutErrorDetail.isVisible = isFailed
+            if (isFailed) {
+                binding.textSyncErrorDetail.text =
+                    recording.errorMessage?.takeIf { it.isNotBlank() }
+                        ?: getString(R.string.error_upload_failed)
+            }
+
+            val isSynced = recording.syncStatus == SyncStatus.SYNCED
+            binding.textSyncUploadedAt.isVisible = isSynced
+            if (isSynced && recording.uploadedAt != null) {
+                binding.textSyncUploadedAt.text =
+                    "Uploaded on ${recording.uploadedAt.toDisplayDateTime()}"
             }
         }
 
@@ -89,16 +115,14 @@ class PlayerFragment : Fragment() {
         }
 
         viewModel.durationMs.observe(viewLifecycleOwner) { duration ->
-            binding.sliderProgress.value = binding.sliderProgress.valueFrom
-            binding.sliderProgress.valueTo = duration.coerceAtLeast(1).toFloat()
             binding.textDuration.text = (duration / 1000L).toDisplayDuration()
         }
 
         viewModel.positionMs.observe(viewLifecycleOwner) { position ->
             binding.textPosition.text = (position / 1000L).toDisplayDuration()
-            if (!isUserSeeking) {
-                val clamped = position.toFloat().coerceIn(0f, binding.sliderProgress.valueTo)
-                binding.sliderProgress.value = clamped
+            if (!isDragging) {
+                val duration = viewModel.durationMs.value?.takeIf { it > 0 } ?: return@observe
+                binding.waveformView.setProgress(position.toFloat() / duration)
             }
         }
 

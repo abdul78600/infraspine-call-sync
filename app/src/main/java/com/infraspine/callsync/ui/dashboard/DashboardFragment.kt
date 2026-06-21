@@ -6,6 +6,7 @@ import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.view.isVisible
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.viewModels
 import androidx.navigation.fragment.findNavController
@@ -16,6 +17,7 @@ import com.infraspine.callsync.databinding.FragmentDashboardBinding
 import com.infraspine.callsync.ui.common.PermissionHelper
 import com.infraspine.callsync.ui.recordings.RecordingFilter
 import com.infraspine.callsync.ui.recordings.RecordingsFragment
+import com.infraspine.callsync.update.AppUpdater
 
 class DashboardFragment : Fragment() {
 
@@ -70,6 +72,10 @@ class DashboardFragment : Fragment() {
 
         binding.buttonViewCallHistory.setOnClickListener {
             findNavController().navigate(R.id.action_dashboard_to_call_history)
+        }
+
+        binding.buttonSyncHistory.setOnClickListener {
+            findNavController().navigate(R.id.action_dashboard_to_sync_history)
         }
 
         binding.buttonSettings.setOnClickListener {
@@ -155,10 +161,38 @@ class DashboardFragment : Fragment() {
         viewModel.isSyncing.observe(viewLifecycleOwner) { syncing ->
             binding.buttonSyncNow.isEnabled = !syncing
             binding.buttonSyncNow.text = getString(if (syncing) R.string.sync_in_progress else R.string.sync_now)
+            if (!syncing) binding.cardSyncProgress.visibility = View.GONE
+        }
+
+        viewModel.syncProgress.observe(viewLifecycleOwner) { progress ->
+            if (progress != null && progress.total > 0) {
+                binding.cardSyncProgress.visibility = View.VISIBLE
+                binding.textSyncProgressDetail.text =
+                    "Uploading ${progress.current + 1} of ${progress.total} recordings…"
+                binding.progressBarSync.max = progress.total
+                binding.progressBarSync.progress = progress.current + 1
+            } else if (viewModel.isSyncing.value == true) {
+                binding.cardSyncProgress.visibility = View.VISIBLE
+                binding.textSyncProgressDetail.text = "Preparing sync…"
+                binding.progressBarSync.progress = 0
+            } else {
+                binding.cardSyncProgress.visibility = View.GONE
+            }
         }
 
         viewModel.message.observe(viewLifecycleOwner) { event ->
             event.getContentIfNotHandled()?.let { showMessage(it) }
+        }
+
+        viewModel.updateUrl.observe(viewLifecycleOwner) { url ->
+            binding.cardUpdateAvailable.isVisible = url != null
+            if (url != null) {
+                binding.buttonDownloadUpdate.setOnClickListener {
+                    binding.buttonDownloadUpdate.isEnabled = false
+                    binding.buttonDownloadUpdate.text = "Downloading…"
+                    AppUpdater.downloadAndInstall(requireContext().applicationContext, url)
+                }
+            }
         }
     }
 
@@ -189,10 +223,22 @@ class DashboardFragment : Fragment() {
             DashboardMessage.SyncWifiRequired -> getString(R.string.error_wifi_required)
             DashboardMessage.SyncApiNotConfigured -> getString(R.string.error_api_url_missing)
             DashboardMessage.SyncAuthRequired -> {
-                getString(R.string.error_auth_required)
+                showSessionExpiredDialog()
+                return
             }
         }
         Snackbar.make(binding.root, text, Snackbar.LENGTH_LONG).show()
+    }
+
+    private fun showSessionExpiredDialog() {
+        com.google.android.material.dialog.MaterialAlertDialogBuilder(requireContext())
+            .setTitle("Session Expired")
+            .setMessage("Your CRM server session has expired. Please login again to continue syncing recordings.")
+            .setPositiveButton("Login Again") { _, _ ->
+                findNavController().navigate(R.id.loginFragment)
+            }
+            .setNegativeButton("Dismiss", null)
+            .show()
     }
 
     override fun onDestroyView() {

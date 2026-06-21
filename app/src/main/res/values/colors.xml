@@ -29,4 +29,39 @@
     <color name="divider">#E5E7EB</color>
     <color name="white">#FFFFFF</color>
     <color name="black">#000000</color>
+
+    <!-- Filter chip raw colors — All -->
+    <color name="chip_all_normal">#E8EFFE</color>
+    <color name="chip_all_active">#1A56DB</color>
+    <color name="chip_all_border">#1A56DB</color>
+    <color name="chip_all_text_off">#1A56DB</color>
+    <color name="chip_all_text_on">#FFFFFF</color>
+
+    <!-- Filter chip raw colors — Pending -->
+    <color name="chip_pending_normal">#FEF3C7</color>
+    <color name="chip_pending_active">#D97706</color>
+    <color name="chip_pending_border">#D97706</color>
+    <color name="chip_pending_text_off">#92400E</color>
+    <color name="chip_pending_text_on">#FFFFFF</color>
+
+    <!-- Filter chip raw colors — Synced -->
+    <color name="chip_synced_normal">#DCFCE7</color>
+    <color name="chip_synced_active">#16A34A</color>
+    <color name="chip_synced_border">#16A34A</color>
+    <color name="chip_synced_text_off">#166534</color>
+    <color name="chip_synced_text_on">#FFFFFF</color>
+
+    <!-- Filter chip raw colors — Failed -->
+    <color name="chip_failed_normal">#FEE2E2</color>
+    <color name="chip_failed_active">#DC2626</color>
+    <color name="chip_failed_border">#DC2626</color>
+    <color name="chip_failed_text_off">#991B1B</color>
+    <color name="chip_failed_text_on">#FFFFFF</color>
+
+    <!-- Filter chip raw colors — Unmatched -->
+    <color name="chip_unmatched_normal">#F3F4F6</color>
+    <color name="chip_unmatched_active">#6B7280</color>
+    <color name="chip_unmatched_border">#9CA3AF</color>
+    <color name="chip_unmatched_text_off">#374151</color>
+    <color name="chip_unmatched_text_on">#FFFFFF</color>
 </resources>

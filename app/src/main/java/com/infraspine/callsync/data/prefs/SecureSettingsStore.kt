@@ -68,6 +68,11 @@ class SecureSettingsStore(context: Context) {
         get() = prefs.getString(KEY_USER_EMAIL, null)?.takeIf { it.isNotBlank() }
         set(value) = prefs.edit { putString(KEY_USER_EMAIL, value?.trim()) }
 
+    /** Stored encrypted — used only for silent auto re-login when token expires. */
+    var savedPassword: String?
+        get() = prefs.getString(KEY_SAVED_PASSWORD, null)?.takeIf { it.isNotBlank() }
+        set(value) = prefs.edit { putString(KEY_SAVED_PASSWORD, value) }
+
     var deviceId: String?
         get() = prefs.getString(KEY_DEVICE_ID, null)
         set(value) = prefs.edit { putString(KEY_DEVICE_ID, value) }
@@ -268,6 +273,7 @@ class SecureSettingsStore(context: Context) {
             remove(KEY_USER_ID)
             remove(KEY_USER_NAME)
             remove(KEY_USER_EMAIL)
+            remove(KEY_SAVED_PASSWORD)
         }
     }
 
@@ -279,6 +285,7 @@ class SecureSettingsStore(context: Context) {
         private const val KEY_USER_ID = "user_id"
         private const val KEY_USER_NAME = "user_name"
         private const val KEY_USER_EMAIL = "user_email"
+        private const val KEY_SAVED_PASSWORD = "saved_password"
         private const val KEY_DEVICE_ID = "device_id"
         private const val KEY_FOLDER_URI = "selected_folder_uri"
         private const val KEY_WIFI_ONLY = "sync_wifi_only"

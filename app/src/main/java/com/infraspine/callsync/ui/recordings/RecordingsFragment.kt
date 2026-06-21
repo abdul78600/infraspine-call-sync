@@ -6,6 +6,7 @@ import android.text.TextWatcher
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import android.widget.PopupMenu
 import androidx.core.os.bundleOf
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.viewModels
@@ -59,6 +60,8 @@ class RecordingsFragment : Fragment() {
             }
         })
 
+        binding.buttonSort.setOnClickListener { showSortMenu(it) }
+
         binding.chipGroupFilter.setOnCheckedStateChangeListener { _, checkedIds ->
             val filter = when (checkedIds.firstOrNull()) {
                 binding.chipPending.id -> RecordingFilter.PENDING
@@ -93,6 +96,18 @@ class RecordingsFragment : Fragment() {
      * pre-selecting the matching chip. [RecordingsViewModel] picks up the resulting
      * `setFilter` call from the chip's checked-state listener — no separate wiring needed.
      */
+    private fun showSortMenu(anchor: View) {
+        val popup = PopupMenu(requireContext(), anchor)
+        RecordingSortOrder.entries.forEachIndexed { i, order ->
+            popup.menu.add(0, i, i, order.label)
+        }
+        popup.setOnMenuItemClickListener { item ->
+            viewModel.setSortOrder(RecordingSortOrder.entries[item.itemId])
+            true
+        }
+        popup.show()
+    }
+
     private fun applyInitialFilterFromArgs() {
         val requested = arguments?.getString(ARG_FILTER)?.let { name ->
             runCatching { RecordingFilter.valueOf(name) }.getOrNull()

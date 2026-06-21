@@ -58,9 +58,24 @@ class PlayerViewModel(
     private val _error = MutableLiveData<Event<PlaybackError>>()
     val error: LiveData<Event<PlaybackError>> = _error
 
+    private val _waveform = MutableLiveData<FloatArray>()
+    val waveform: LiveData<FloatArray> = _waveform
+
+    private var waveformUri: String? = null
+    private var waveformJob: kotlinx.coroutines.Job? = null
+
     private var mediaPlayer: MediaPlayer? = null
     private var progressJob: Job? = null
     private var preparedUri: String? = null
+
+    fun loadWaveform(fileUri: String) {
+        if (fileUri == waveformUri) return  // already decoded this file
+        waveformUri = fileUri
+        waveformJob?.cancel()
+        waveformJob = viewModelScope.launch {
+            _waveform.value = WaveformDecoder.decode(appContext, fileUri)
+        }
+    }
 
     fun togglePlayback(fileUri: String) {
         val player = mediaPlayer

@@ -28,6 +28,10 @@
         <action
             android:id="@+id/action_dashboard_to_settings"
             app:destination="@id/settingsFragment" />
+
+        <action
+            android:id="@+id/action_dashboard_to_sync_history"
+            app:destination="@id/syncHistoryFragment" />
     </fragment>
 
     <fragment
@@ -58,5 +62,11 @@
         android:name="com.infraspine.callsync.ui.settings.SettingsFragment"
         android:label="@string/settings_title"
         tools:layout="@layout/fragment_settings" />
+
+    <fragment
+        android:id="@+id/syncHistoryFragment"
+        android:name="com.infraspine.callsync.ui.synchistory.SyncHistoryFragment"
+        android:label="Sync History"
+        tools:layout="@layout/fragment_sync_history" />
 
 </navigation>

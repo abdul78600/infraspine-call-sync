@@ -54,7 +54,7 @@ data class RecordingCheckItem(
 )
 
 data class RecordingExistingCheckResponse(
-    val existing: List<String>? = null,
-    val missing: List<String>? = null,
+    val existing: JsonElement? = null,
+    val missing: JsonElement? = null,
     val message: String? = null
 )

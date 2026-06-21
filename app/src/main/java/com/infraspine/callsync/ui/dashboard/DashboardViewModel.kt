@@ -16,7 +16,11 @@ import com.infraspine.callsync.data.repository.SyncRepository
 import com.infraspine.callsync.data.repository.SyncResult
 import com.infraspine.callsync.domain.model.SyncStatus
 import com.infraspine.callsync.domain.util.NetworkDiagnostics
+import com.infraspine.callsync.data.repository.AuthRepository
+import com.infraspine.callsync.data.repository.SyncProgress
 import com.infraspine.callsync.ui.common.Event
+import com.infraspine.callsync.update.UpdateCheckResult
+import com.infraspine.callsync.update.UpdateChecker
 import kotlinx.coroutines.launch
 
 data class DashboardCounts(
@@ -54,7 +58,9 @@ sealed class DashboardMessage {
 
 class DashboardViewModel(
     private val recordingRepository: RecordingRepository,
-    private val syncRepository: SyncRepository
+    private val syncRepository: SyncRepository,
+    private val authRepository: AuthRepository,
+    private val updateChecker: UpdateChecker
 ) : ViewModel() {
     private var lastManualSyncAtMs: Long = 0L
 
@@ -63,6 +69,27 @@ class DashboardViewModel(
 
     private val _isSyncing = MutableLiveData(false)
     val isSyncing: LiveData<Boolean> = _isSyncing
+
+    val syncProgress: LiveData<SyncProgress?> =
+        syncRepository.syncProgress.asLiveData()
+
+    private val _updateUrl = MutableLiveData<String?>(null)
+    val updateUrl: LiveData<String?> = _updateUrl
+
+    init {
+        checkForUpdateSilently()
+    }
+
+    private fun checkForUpdateSilently() {
+        viewModelScope.launch {
+            runCatching {
+                when (val result = updateChecker.checkForUpdate()) {
+                    is UpdateCheckResult.UpdateAvailable -> _updateUrl.value = result.downloadUrl
+                    else -> _updateUrl.value = null
+                }
+            }
+        }
+    }
 
     private val _message = MutableLiveData<Event<DashboardMessage>>()
     val message: LiveData<Event<DashboardMessage>> = _message
@@ -111,18 +138,25 @@ class DashboardViewModel(
         lastManualSyncAtMs = now
         viewModelScope.launch {
             _isSyncing.value = true
-            val result = runCatching {
+
+            var result = runCatching {
                 syncRepository.syncPending(CallLogSyncTrigger.MANUAL)
             }.onFailure {
                 NetworkDiagnostics.logUnexpectedFailure("manual sync", it)
             }.getOrElse {
                 _isSyncing.value = false
-                _message.value = Event(
-                    DashboardMessage.SyncError(
-                        it.message ?: "Unexpected sync failure"
-                    )
-                )
+                _message.value = Event(DashboardMessage.SyncError(it.message ?: "Unexpected sync failure"))
                 return@launch
+            }
+
+            // Session expired → auto re-login silently → retry once
+            if (result == SyncResult.AuthRequired) {
+                val reloggedIn = runCatching { authRepository.autoReLogin() }.getOrElse { false }
+                if (reloggedIn) {
+                    result = runCatching {
+                        syncRepository.syncPending(CallLogSyncTrigger.MANUAL)
+                    }.getOrElse { SyncResult.AuthRequired }
+                }
             }
             _isSyncing.value = false
 
@@ -153,7 +187,9 @@ class DashboardViewModel(
         override fun <T : ViewModel> create(modelClass: Class<T>): T {
             return DashboardViewModel(
                 container.recordingRepository,
-                container.syncRepository
+                container.syncRepository,
+                container.authRepository,
+                container.updateChecker
             ) as T
         }
     }
