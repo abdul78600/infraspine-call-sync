@@ -19,8 +19,6 @@ import com.infraspine.callsync.domain.util.NetworkDiagnostics
 import com.infraspine.callsync.data.repository.AuthRepository
 import com.infraspine.callsync.data.repository.SyncProgress
 import com.infraspine.callsync.ui.common.Event
-import com.infraspine.callsync.update.UpdateCheckResult
-import com.infraspine.callsync.update.UpdateChecker
 import kotlinx.coroutines.launch
 
 data class DashboardCounts(
@@ -59,8 +57,7 @@ sealed class DashboardMessage {
 class DashboardViewModel(
     private val recordingRepository: RecordingRepository,
     private val syncRepository: SyncRepository,
-    private val authRepository: AuthRepository,
-    private val updateChecker: UpdateChecker
+    private val authRepository: AuthRepository
 ) : ViewModel() {
     private var lastManualSyncAtMs: Long = 0L
 
@@ -72,24 +69,6 @@ class DashboardViewModel(
 
     val syncProgress: LiveData<SyncProgress?> =
         syncRepository.syncProgress.asLiveData()
-
-    private val _updateUrl = MutableLiveData<String?>(null)
-    val updateUrl: LiveData<String?> = _updateUrl
-
-    init {
-        checkForUpdateSilently()
-    }
-
-    private fun checkForUpdateSilently() {
-        viewModelScope.launch {
-            runCatching {
-                when (val result = updateChecker.checkForUpdate()) {
-                    is UpdateCheckResult.UpdateAvailable -> _updateUrl.value = result.downloadUrl
-                    else -> _updateUrl.value = null
-                }
-            }
-        }
-    }
 
     private val _message = MutableLiveData<Event<DashboardMessage>>()
     val message: LiveData<Event<DashboardMessage>> = _message
@@ -188,8 +167,7 @@ class DashboardViewModel(
             return DashboardViewModel(
                 container.recordingRepository,
                 container.syncRepository,
-                container.authRepository,
-                container.updateChecker
+                container.authRepository
             ) as T
         }
     }

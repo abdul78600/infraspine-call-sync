@@ -73,9 +73,9 @@ class UpdateChecker(context: Context) {
                     releaseSha == null ->
                         UpdateCheckResult.Error("Could not determine the published build's commit")
                     runningSha.isBlank() || runningSha == "unknown" ->
-                        // Can't identify our own build (e.g. a local build without CI env) —
-                        // surface the release as available rather than falsely claim "up to date".
-                        UpdateCheckResult.UpdateAvailable(downloadUrl)
+                        // Local/debug build — SHA not embedded by CI, treat as up to date
+                        // so the update banner never shows for sideloaded debug builds.
+                        UpdateCheckResult.UpToDate
                     releaseSha == runningSha ->
                         UpdateCheckResult.UpToDate
                     else ->

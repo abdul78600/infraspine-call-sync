@@ -17,7 +17,6 @@ import com.infraspine.callsync.databinding.FragmentDashboardBinding
 import com.infraspine.callsync.ui.common.PermissionHelper
 import com.infraspine.callsync.ui.recordings.RecordingFilter
 import com.infraspine.callsync.ui.recordings.RecordingsFragment
-import com.infraspine.callsync.update.AppUpdater
 
 class DashboardFragment : Fragment() {
 
@@ -184,16 +183,6 @@ class DashboardFragment : Fragment() {
             event.getContentIfNotHandled()?.let { showMessage(it) }
         }
 
-        viewModel.updateUrl.observe(viewLifecycleOwner) { url ->
-            binding.cardUpdateAvailable.isVisible = url != null
-            if (url != null) {
-                binding.buttonDownloadUpdate.setOnClickListener {
-                    binding.buttonDownloadUpdate.isEnabled = false
-                    binding.buttonDownloadUpdate.text = "Downloading…"
-                    AppUpdater.downloadAndInstall(requireContext().applicationContext, url)
-                }
-            }
-        }
     }
 
     private fun showMessage(message: DashboardMessage) {
