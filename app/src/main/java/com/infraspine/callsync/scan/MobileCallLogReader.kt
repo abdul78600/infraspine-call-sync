@@ -3,6 +3,7 @@ package com.infraspine.callsync.scan
 import android.content.Context
 import android.provider.CallLog
 import com.infraspine.callsync.domain.model.CallType
+import com.infraspine.callsync.domain.util.NetworkDiagnostics
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
@@ -46,6 +47,7 @@ class MobileCallLogReader(private val context: Context) {
         val sortOrder = "${CallLog.Calls.DATE} ASC, ${CallLog.Calls._ID} ASC"
 
         load(
+            label = "after_cursor(startedAt=$lastSyncedCallStartedAt,id=$lastSyncedAndroidCallLogId)",
             selection = selection,
             selectionArgs = selectionArgs,
             sortOrder = sortOrder,
@@ -59,6 +61,7 @@ class MobileCallLogReader(private val context: Context) {
     suspend fun loadSince(startedAtMillis: Long): List<MobileCallLog> = withContext(Dispatchers.IO) {
         if (startedAtMillis <= 0L) {
             load(
+                label = "since(all)",
                 selection = null,
                 selectionArgs = null,
                 sortOrder = "${CallLog.Calls.DATE} ASC, ${CallLog.Calls._ID} ASC",
@@ -66,6 +69,7 @@ class MobileCallLogReader(private val context: Context) {
             )
         } else {
             load(
+                label = "since(startedAt=$startedAtMillis)",
                 selection = "${CallLog.Calls.DATE} >= ?",
                 selectionArgs = arrayOf(startedAtMillis.toString()),
                 sortOrder = "${CallLog.Calls.DATE} ASC, ${CallLog.Calls._ID} ASC",
@@ -104,12 +108,21 @@ class MobileCallLogReader(private val context: Context) {
                     cachedContactName = cachedNameIdx.takeIf { it >= 0 }?.let { cursor.getString(it) }
                 )
             }
+        }.onFailure {
+            NetworkDiagnostics.logCallLogProviderFailure("latest", it)
         }
+        NetworkDiagnostics.logCallLogProviderRead(
+            label = "latest",
+            count = if (latest == null) 0 else 1,
+            first = latest?.summary().orEmpty(),
+            last = latest?.summary().orEmpty()
+        )
 
         latest
     }
 
     private fun load(
+        label: String,
         selection: String?,
         selectionArgs: Array<String>?,
         sortOrder: String,
@@ -123,7 +136,7 @@ class MobileCallLogReader(private val context: Context) {
                 PROJECTION,
                 selection,
                 selectionArgs,
-                "$sortOrder LIMIT $limit"
+                sortOrder
             )?.use { cursor ->
                 val idIdx = cursor.getColumnIndex(CallLog.Calls._ID)
                 val numberIdx = cursor.getColumnIndex(CallLog.Calls.NUMBER)
@@ -132,7 +145,7 @@ class MobileCallLogReader(private val context: Context) {
                 val durationIdx = cursor.getColumnIndex(CallLog.Calls.DURATION)
                 val cachedNameIdx = cursor.getColumnIndex(CallLog.Calls.CACHED_NAME)
 
-                while (cursor.moveToNext()) {
+                while (cursor.moveToNext() && logs.size < limit) {
                     val id = idIdx.takeIf { it >= 0 }?.let { cursor.getLong(it) } ?: continue
                     logs += MobileCallLog(
                         id = id,
@@ -146,10 +159,21 @@ class MobileCallLogReader(private val context: Context) {
                     )
                 }
             }
+        }.onFailure {
+            NetworkDiagnostics.logCallLogProviderFailure(label, it)
         }
+        NetworkDiagnostics.logCallLogProviderRead(
+            label = label,
+            count = logs.size,
+            first = logs.firstOrNull()?.summary().orEmpty(),
+            last = logs.lastOrNull()?.summary().orEmpty()
+        )
 
         return logs
     }
+
+    private fun MobileCallLog.summary(): String =
+        "{id=$id,startedAt=$startedAt,type=$callType,hasPhone=${!phoneNumber.isNullOrBlank()}}"
 
     companion object {
         private val PROJECTION = arrayOf(

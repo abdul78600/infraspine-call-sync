@@ -45,6 +45,8 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
 import java.io.IOException
 import java.time.Instant
+import java.time.LocalDateTime
+import java.time.OffsetDateTime
 import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
 
@@ -231,12 +233,12 @@ class SyncRepository(
         val deviceId = DeviceIdProvider.getOrCreate(context.applicationContext, settingsStore)
         val api = apiFactory.getService()
         if (api == null) return
-        when (val outcome = fetchCallLogSyncState(api, deviceId)) {
+        when (val outcome = fetchCallLogSyncStateWithAuthRetry(api, deviceId)) {
             is SyncStateOutcome.Available -> {
                 val profileKey = resolveProfileKey(deviceId, outcome.state.serverInstanceId)
                 settingsStore.setCallLogSyncState(profileKey, outcome.state)
             }
-            SyncStateOutcome.Unauthorized -> handleUnauthorizedSync()
+            SyncStateOutcome.Unauthorized -> Unit
             is SyncStateOutcome.Error -> NetworkDiagnostics.logConnectionFailure(outcome.message)
         }
     }
@@ -505,7 +507,7 @@ class SyncRepository(
             if (!settingsStore.isCallLogResetRequested(profileKey)) {
                 _syncProgress.value = SyncProgress(current = 0, total = 0, phase = "fetching_call_logs")
                 val stateOutcome = withTimeoutOrNull(CHECK_EXISTING_TIMEOUT_MS) {
-                    fetchCallLogSyncState(api, deviceId)
+                    fetchCallLogSyncStateWithAuthRetry(api, deviceId)
                 }
 
                 when (stateOutcome) {
@@ -514,10 +516,6 @@ class SyncRepository(
                         settingsStore.setCallLogSyncState(profileKey, stateOutcome.state)
                     }
                     SyncStateOutcome.Unauthorized -> {
-                        if (!retriedAfterUnauthorized && handleUnauthorizedSync()) {
-                            retriedAfterUnauthorized = true
-                            continue@syncAttempt
-                        }
                         return CallLogSyncStats(authRequired = true)
                     }
                     is SyncStateOutcome.Error -> syncStateError = stateOutcome.message
@@ -573,15 +571,34 @@ class SyncRepository(
                 lastSyncedAndroidCallLogId = queryCursor.lastSyncedAndroidCallLogId,
                 lastSyncedCallStartedAt = queryCursor.lastSyncedCallStartedAt
             )
+            val safetyFetched = if (
+                cursorFetched.isEmpty() &&
+                !queryCursor.isEmpty()
+            ) {
+                val safetyWindowStartedAt = (syncStartedAt - CALL_LOG_RECOVERY_WINDOW_MS).coerceAtLeast(0L)
+                NetworkDiagnostics.logCallLogSyncSkipped(
+                    "cursor query returned no rows; checking recent call-log window before declaring nothing to sync"
+                )
+                callLogReader.loadSince(safetyWindowStartedAt)
+            } else {
+                emptyList()
+            }
             val recoveryFetched = if (shouldRunRecovery) {
                 val recoveryWindowStartedAt = (syncStartedAt - CALL_LOG_RECOVERY_WINDOW_MS).coerceAtLeast(0L)
                 callLogReader.loadSince(recoveryWindowStartedAt)
             } else {
                 emptyList()
             }
-            val fetched = CallLogSyncSupport.mergeFetchedLogs(cursorFetched, recoveryFetched)
+            val fetched = CallLogSyncSupport.mergeFetchedLogs(
+                cursorFetched = cursorFetched,
+                recoveryFetched = recoveryFetched + safetyFetched
+            )
+            NetworkDiagnostics.logCallLogSyncSkipped(
+                "provider counts after status: cursor=${cursorFetched.size} safety=${safetyFetched.size} recovery=${recoveryFetched.size} merged=${fetched.size}"
+            )
             val cursorAdvanceLog = cursorFetched.maxWithOrNull(CALL_LOG_CURSOR_ORDER)
             if (fetched.isEmpty()) {
+                NetworkDiagnostics.logCallLogSyncSkipped("no call logs fetched from provider; check READ_CALL_LOG permission and provider read diagnostics")
                 persistCallLogCursorAfterSuccessfulPass(
                     profileKey = profileKey,
                     localCursor = localCursor,
@@ -612,6 +629,9 @@ class SyncRepository(
             }
 
             if (uploadable.isEmpty()) {
+                NetworkDiagnostics.logCallLogSyncSkipped(
+                    "all fetched call logs were filtered locally before check-existing; skipped=$skipped"
+                )
                 persistCallLogCursorAfterSuccessfulPass(
                     profileKey = profileKey,
                     localCursor = localCursor,
@@ -647,11 +667,17 @@ class SyncRepository(
                 }
                 when (outcome) {
                     is ExistenceCheckOutcome.Available -> {
-                        val missingRefs = outcome.missingRefs
-                            ?: return CallLogSyncStats(
-                                skipped = skipped,
-                                errorMessage = "Call log check-existing response did not identify missing records"
+                        val uploadableRefs = uploadable.mapTo(mutableSetOf()) { it.id.toString() }
+                        val missingRefs = CallLogSyncSupport.missingRefsOrFallback(
+                            uploadableRefs = uploadableRefs,
+                            existingRefs = outcome.existingRefs,
+                            missingRefs = outcome.missingRefs
+                        )
+                        if (outcome.missingRefs == null) {
+                            NetworkDiagnostics.logCallLogSyncSkipped(
+                                "check-existing response omitted missing refs; derived missing=${missingRefs.size} from uploadable=${uploadableRefs.size} existing=${outcome.existingRefs.size}"
                             )
+                        }
                         val existing = uploadable.filter { it.id.toString() in outcome.existingRefs }
                         val stillMissing = uploadable.filter { it.id.toString() in missingRefs }
                         skippedDuplicate = existing.size
@@ -706,7 +732,7 @@ class SyncRepository(
                 totalFetched = fetched.size,
                 uploadable = missing.size,
                 skipped = skipped,
-                sample = sampleCallLogPayload(missing.take(3), deviceId)
+                sample = sampleCallLogPayload(missing.diagnosticSample(), deviceId)
             )
 
             var uploaded = 0
@@ -723,7 +749,7 @@ class SyncRepository(
                     batchCount = batches.size,
                     batchSize = payload.size,
                     totalMissing = missing.size,
-                    sample = sampleCallLogSyncItems(payload.take(3))
+                    sample = sampleCallLogSyncItems(payload.diagnosticSample())
                 )
 
                 val response = try {
@@ -897,7 +923,8 @@ class SyncRepository(
                 chunkSize = chunk.size,
                 wrapperKey = "records",
                 deviceIdPresent = deviceId.isNotBlank(),
-                firstItemJson = chunk.firstOrNull()?.let { GSON.toJson(it) } ?: "<empty>"
+                firstItemJson = chunk.firstOrNull()?.let { GSON.toJson(it) } ?: "<empty>",
+                lastItemJson = chunk.lastOrNull()?.let { GSON.toJson(it) } ?: "<empty>"
             )
             val response = try {
                 api.checkExistingCallLogs(request)
@@ -959,10 +986,18 @@ class SyncRepository(
     ): SyncStateOutcome {
         if (api == null) return SyncStateOutcome.Error("CRM server URL is not configured")
 
-        val statusResponse = try {
+        var statusResponse = try {
             api.getCallLogSyncStatus(deviceId)
         } catch (io: IOException) {
             null
+        }
+        if (statusResponse?.code() == 404 || statusResponse?.code() == 501) {
+            NetworkDiagnostics.logCallLogSyncSkipped("primary sync/status endpoint not available; trying legacy call-log status endpoint")
+            statusResponse = try {
+                api.getCallLogSyncStatusLegacy(deviceId)
+            } catch (io: IOException) {
+                null
+            }
         }
         if (statusResponse != null) {
             if (statusResponse.isSuccessful) {
@@ -996,10 +1031,18 @@ class SyncRepository(
             }
         }
 
-        val response = try {
+        var response = try {
             api.getCallLogSyncState(deviceId)
         } catch (io: IOException) {
             return SyncStateOutcome.Error(NetworkDiagnostics.classify(throwable = io))
+        }
+        if (response.code() == 404 || response.code() == 501) {
+            NetworkDiagnostics.logCallLogSyncSkipped("primary sync-state endpoint not available; trying legacy call-log sync-state endpoint")
+            response = try {
+                api.getCallLogSyncStateLegacy(deviceId)
+            } catch (io: IOException) {
+                return SyncStateOutcome.Error(NetworkDiagnostics.classify(throwable = io))
+            }
         }
 
         if (!response.isSuccessful) {
@@ -1027,6 +1070,19 @@ class SyncRepository(
                 totalLogs = body?.totalLogs ?: 0
             )
         )
+    }
+
+    private suspend fun fetchCallLogSyncStateWithAuthRetry(
+        api: CrmApiService?,
+        deviceId: String
+    ): SyncStateOutcome {
+        var retriedAfterUnauthorized = false
+        while (true) {
+            val outcome = fetchCallLogSyncState(api, deviceId)
+            if (outcome != SyncStateOutcome.Unauthorized) return outcome
+            if (retriedAfterUnauthorized || !handleUnauthorizedSync()) return outcome
+            retriedAfterUnauthorized = true
+        }
     }
 
     private fun resolveProfileKey(
@@ -1136,6 +1192,9 @@ class SyncRepository(
             "{id=${it.externalCallId}, type=${it.callType}, startedAt=${it.callStartedAt}, hasPhone=${it.phoneNumber.isNotBlank()}}"
         }
 
+    private fun <T> List<T>.diagnosticSample(): List<T> =
+        if (size <= 6) this else take(3) + takeLast(3)
+
     private fun MobileCallLog.normalizedPhoneNumber(): String? =
         DedupKeyBuilder.normalizePhoneNumber(phoneNumber)
 
@@ -1207,11 +1266,19 @@ class SyncRepository(
         val element = this ?: return 0L
         if (element is JsonPrimitive && element.isNumber) return element.asLong
         val raw = if (element is JsonPrimitive && element.isString) element.asString else return 0L
-        return raw.toLongOrNull() ?: runCatching { Instant.parse(raw).toEpochMilli() }.getOrDefault(0L)
+        return raw.toEpochMillisOrZero()
     }
 
     private fun String.toEpochMillisOrZero(): Long =
-        toLongOrNull() ?: runCatching { Instant.parse(this).toEpochMilli() }.getOrDefault(0L)
+        trim().takeIf { it.isNotBlank() }?.let { raw ->
+            raw.toLongOrNull()
+                ?: runCatching { Instant.parse(raw).toEpochMilli() }.getOrNull()
+                ?: runCatching { OffsetDateTime.parse(raw).toInstant().toEpochMilli() }.getOrNull()
+                ?: runCatching { LocalDateTime.parse(raw, DateTimeFormatter.ISO_LOCAL_DATE_TIME).toInstant(ZoneOffset.UTC).toEpochMilli() }.getOrNull()
+                ?: runCatching {
+                    LocalDateTime.parse(raw, SERVER_SPACE_DATE_TIME).toInstant(ZoneOffset.UTC).toEpochMilli()
+                }.getOrNull()
+        } ?: 0L
 
     /**
      * Called when the server rejects a sync request with 401. First attempts a
@@ -1262,6 +1329,8 @@ class SyncRepository(
         private const val CALL_LOG_RECOVERY_INTERVAL_MS = 24L * 60L * 60L * 1000L
         private val CHECK_EXISTING_REF_KEYS = listOf("clientRef", "externalCallId", "id", "_id")
         private val CALL_LOG_CURSOR_ORDER = compareBy<MobileCallLog> { it.startedAt }.thenBy { it.id }
+        private val SERVER_SPACE_DATE_TIME: DateTimeFormatter =
+            DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")
         private val GSON = Gson()
     }
 }

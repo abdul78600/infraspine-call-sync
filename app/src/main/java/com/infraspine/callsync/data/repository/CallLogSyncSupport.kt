@@ -120,6 +120,13 @@ internal object CallLogSyncSupport {
         return merged.values.sortedWith(compareBy<MobileCallLog> { it.startedAt }.thenBy { it.id })
     }
 
+    fun missingRefsOrFallback(
+        uploadableRefs: Set<String>,
+        existingRefs: Set<String>,
+        missingRefs: Set<String>?
+    ): Set<String> =
+        missingRefs ?: (uploadableRefs - existingRefs)
+
     fun effectiveCursor(
         local: CallLogSyncCursor,
         remote: CallLogSyncStateSnapshot,
@@ -150,14 +157,32 @@ internal object CallLogSyncSupport {
         if (remote.isEmpty()) {
             return CallLogCursorDecision(queryCursor = local)
         }
-
-        return CallLogCursorDecision(
-            queryCursor = CallLogSyncCursor(
-                lastSyncedCallStartedAt = remote.latestCallStartedAt,
-                lastSyncedAndroidCallLogId = remote.latestAndroidCallLogId,
-                lastCallLogSyncAt = local.lastCallLogSyncAt
+        if (local.isEmpty()) {
+            return CallLogCursorDecision(
+                queryCursor = CallLogSyncCursor(
+                    lastSyncedCallStartedAt = remote.latestCallStartedAt,
+                    lastSyncedAndroidCallLogId = remote.latestAndroidCallLogId,
+                    lastCallLogSyncAt = local.lastCallLogSyncAt
+                )
             )
-        )
+        }
+
+        val remoteIsNewer =
+            remote.latestCallStartedAt > local.lastSyncedCallStartedAt ||
+                (remote.latestCallStartedAt == local.lastSyncedCallStartedAt &&
+                    remote.latestAndroidCallLogId > local.lastSyncedAndroidCallLogId)
+
+        return if (remoteIsNewer) {
+            CallLogCursorDecision(
+                queryCursor = CallLogSyncCursor(
+                    lastSyncedCallStartedAt = remote.latestCallStartedAt,
+                    lastSyncedAndroidCallLogId = remote.latestAndroidCallLogId,
+                    lastCallLogSyncAt = local.lastCallLogSyncAt
+                )
+            )
+        } else {
+            CallLogCursorDecision(queryCursor = local)
+        }
     }
 }
 

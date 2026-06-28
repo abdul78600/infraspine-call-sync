@@ -52,8 +52,18 @@ interface CrmApiService {
         @Query("deviceId") deviceId: String
     ): Response<CallLogSyncStateResponse>
 
+    @GET("api/call-logs/sync-state")
+    suspend fun getCallLogSyncStateLegacy(
+        @Query("deviceId") deviceId: String
+    ): Response<CallLogSyncStateResponse>
+
     @GET("api/crm/call-logs/sync/status")
     suspend fun getCallLogSyncStatus(
+        @Query("deviceId") deviceId: String
+    ): Response<CallLogSyncStatusResponse>
+
+    @GET("api/call-logs/sync/status")
+    suspend fun getCallLogSyncStatusLegacy(
         @Query("deviceId") deviceId: String
     ): Response<CallLogSyncStatusResponse>
 

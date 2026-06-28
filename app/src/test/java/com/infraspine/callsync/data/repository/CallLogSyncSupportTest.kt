@@ -180,7 +180,7 @@ class CallLogSyncSupportTest {
     }
 
     @Test
-    fun effectiveCursorUsesRemoteCheckpointWhenLocalCursorIsAhead() {
+    fun effectiveCursorKeepsLocalCursorWhenItIsAheadOfRemoteCheckpoint() {
         val decision = CallLogSyncSupport.effectiveCursor(
             local = CallLogSyncCursor(
                 lastSyncedCallStartedAt = 6_000L,
@@ -199,9 +199,31 @@ class CallLogSyncSupportTest {
             syncedAt = 333L
         )
 
-        assertEquals(88L, decision.queryCursor.lastSyncedAndroidCallLogId)
-        assertEquals(5_000L, decision.queryCursor.lastSyncedCallStartedAt)
+        assertEquals(600L, decision.queryCursor.lastSyncedAndroidCallLogId)
+        assertEquals(6_000L, decision.queryCursor.lastSyncedCallStartedAt)
         assertEquals(222L, decision.queryCursor.lastCallLogSyncAt)
+    }
+
+    @Test
+    fun missingRefsUseServerProvidedMissingWhenAvailable() {
+        val missing = CallLogSyncSupport.missingRefsOrFallback(
+            uploadableRefs = setOf("1", "2", "3"),
+            existingRefs = setOf("1"),
+            missingRefs = setOf("3")
+        )
+
+        assertEquals(setOf("3"), missing)
+    }
+
+    @Test
+    fun missingRefsFallbackToUploadableMinusExistingWhenServerOmitsMissing() {
+        val missing = CallLogSyncSupport.missingRefsOrFallback(
+            uploadableRefs = setOf("1", "2", "3"),
+            existingRefs = setOf("1"),
+            missingRefs = null
+        )
+
+        assertEquals(setOf("2", "3"), missing)
     }
 
     @Test

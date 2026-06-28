@@ -182,13 +182,14 @@ object NetworkDiagnostics {
         chunkSize: Int,
         wrapperKey: String,
         deviceIdPresent: Boolean,
-        firstItemJson: String
+        firstItemJson: String,
+        lastItemJson: String
     ) {
         Log.d(
             TAG,
             "Call log check-existing request: totalRecords=$totalRecords chunkIndex=$chunkIndex " +
                 "chunkSize=$chunkSize wrapperKey=$wrapperKey deviceIdPresent=$deviceIdPresent " +
-                "firstItem=$firstItemJson"
+                "firstItem=$firstItemJson lastItem=$lastItemJson"
         )
     }
 
@@ -213,6 +214,26 @@ object NetworkDiagnostics {
             "Call log cursor: localStartedAt=$localStartedAt localAndroidId=$localAndroidId " +
                 "remoteStartedAt=$remoteStartedAt remoteAndroidId=$remoteAndroidId " +
                 "effectiveStartedAt=$effectiveStartedAt effectiveAndroidId=$effectiveAndroidId"
+        )
+    }
+
+    fun logCallLogProviderRead(
+        label: String,
+        count: Int,
+        first: String,
+        last: String
+    ) {
+        Log.d(
+            TAG,
+            "Call log provider read: label=$label count=$count first=$first last=$last"
+        )
+    }
+
+    fun logCallLogProviderFailure(label: String, throwable: Throwable) {
+        Log.e(
+            TAG,
+            "Call log provider read failed: label=$label ${throwable::class.java.simpleName}: ${throwable.message ?: "<no message>"}",
+            throwable
         )
     }
 
