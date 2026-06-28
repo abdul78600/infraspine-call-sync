@@ -11,6 +11,13 @@ object PermissionHelper {
         ContextCompat.checkSelfPermission(context, Manifest.permission.READ_CALL_LOG) ==
             PackageManager.PERMISSION_GRANTED
 
+    fun hasPhoneStatePermission(context: Context): Boolean =
+        ContextCompat.checkSelfPermission(context, Manifest.permission.READ_PHONE_STATE) ==
+            PackageManager.PERMISSION_GRANTED
+
+    fun hasCallSyncPermissions(context: Context): Boolean =
+        hasCallLogPermission(context) && hasPhoneStatePermission(context)
+
     fun hasNotificationPermission(context: Context): Boolean {
         return if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
             ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) ==

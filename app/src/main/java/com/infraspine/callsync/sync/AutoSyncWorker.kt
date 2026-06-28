@@ -17,6 +17,7 @@ import com.infraspine.callsync.data.repository.SyncResult
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
+import java.util.concurrent.atomic.AtomicBoolean
 
 class AutoSyncWorker(
     private val appContext: Context,
@@ -24,63 +25,71 @@ class AutoSyncWorker(
 ) : CoroutineWorker(appContext, params) {
 
     override suspend fun doWork(): Result {
-        val app = appContext as CallSyncApplication
-        val container = app.container
-        val recordingRepository = container.recordingRepository
-        val syncRepository = container.syncRepository
-
-        // Show initial foreground notification so Android lets us run
-        setForeground(buildForegroundInfo(null))
-
-        // 1. Scan for new files first, otherwise we only sync what was found while app was open
-        recordingRepository.scanAndMatch()
-
-        var workerResult: Result = Result.success()
-
-        coroutineScope {
-            // Collect progress and update notification in parallel
-            val progressJob = launch {
-                syncRepository.syncProgress.collectLatest { progress ->
-                    setForeground(buildForegroundInfo(progress))
-                }
-            }
-
-            val syncResult = syncRepository.syncPending(CallLogSyncTrigger.PERIODIC)
-            
-            workerResult = when (syncResult) {
-                is SyncResult.Completed,
-                SyncResult.NothingToSync -> Result.success()
-
-                SyncResult.NetworkUnavailable,
-                SyncResult.WifiRequired -> Result.retry()
-
-                SyncResult.ApiNotConfigured -> Result.success()
-
-                SyncResult.AuthRequired -> {
-                    val reloggedIn = runCatching { container.authRepository.autoReLogin() }.getOrElse { false }
-                    if (reloggedIn) {
-                        // Retry once with new token
-                        when (syncRepository.syncPending(CallLogSyncTrigger.PERIODIC)) {
-                            is SyncResult.Completed,
-                            SyncResult.NothingToSync -> Result.success()
-                            SyncResult.NetworkUnavailable,
-                            SyncResult.WifiRequired -> Result.retry()
-                            else -> Result.success()
-                        }
-                    } else {
-                        Result.success()
-                    }
-                }
-            }
-
-            progressJob.cancel()
+        if (!running.compareAndSet(false, true)) {
+            return Result.success()
         }
 
-        // Dismiss the notification when done
-        (appContext.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager)
-            .cancel(NOTIFICATION_ID)
+        try {
+            val app = appContext as CallSyncApplication
+            val container = app.container
+            val recordingRepository = container.recordingRepository
+            val syncRepository = container.syncRepository
 
-        return workerResult
+            // Show initial foreground notification so Android lets us run
+            setForeground(buildForegroundInfo(null))
+
+            // 1. Scan for new files first, otherwise we only sync what was found while app was open
+            recordingRepository.scanAndMatch()
+
+            var workerResult: Result = Result.success()
+
+            coroutineScope {
+                // Collect progress and update notification in parallel
+                val progressJob = launch {
+                    syncRepository.syncProgress.collectLatest { progress ->
+                        setForeground(buildForegroundInfo(progress))
+                    }
+                }
+
+                val syncResult = syncRepository.syncPending(CallLogSyncTrigger.PERIODIC)
+
+                workerResult = when (syncResult) {
+                    is SyncResult.Completed,
+                    SyncResult.NothingToSync -> Result.success()
+
+                    SyncResult.NetworkUnavailable,
+                    SyncResult.WifiRequired -> Result.retry()
+
+                    SyncResult.ApiNotConfigured -> Result.success()
+
+                    SyncResult.AuthRequired -> {
+                        val reloggedIn = runCatching { container.authRepository.autoReLogin() }.getOrElse { false }
+                        if (reloggedIn) {
+                            // Retry once with new token
+                            when (syncRepository.syncPending(CallLogSyncTrigger.PERIODIC)) {
+                                is SyncResult.Completed,
+                                SyncResult.NothingToSync -> Result.success()
+                                SyncResult.NetworkUnavailable,
+                                SyncResult.WifiRequired -> Result.retry()
+                                else -> Result.success()
+                            }
+                        } else {
+                            Result.success()
+                        }
+                    }
+                }
+
+                progressJob.cancel()
+            }
+
+            // Dismiss the notification when done
+            (appContext.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager)
+                .cancel(NOTIFICATION_ID)
+
+            return workerResult
+        } finally {
+            running.set(false)
+        }
     }
 
     private fun buildForegroundInfo(progress: SyncProgress?): ForegroundInfo {
@@ -116,6 +125,8 @@ class AutoSyncWorker(
 
     companion object {
         const val UNIQUE_WORK_NAME = "auto_sync_work"
+        const val ON_DEMAND_UNIQUE_WORK_NAME = "auto_sync_on_demand_work"
         private const val NOTIFICATION_ID = 1001
+        private val running = AtomicBoolean(false)
     }
 }

@@ -107,7 +107,7 @@
 
     <!-- Errors / status messages -->
     <string name="error_no_folder">Please select a recording folder first</string>
-    <string name="error_call_log_permission">Call log permission denied. Recordings cannot be matched and mobile call logs cannot be synced.</string>
+    <string name="error_call_log_permission">Phone and call log permissions are required to match recordings and sync mobile call logs.</string>
     <string name="error_no_recordings">No audio recordings found in the selected folder</string>
     <string name="error_duplicate_file">This recording was already added, skipping duplicate</string>
     <string name="error_upload_failed">Upload failed</string>
@@ -116,7 +116,7 @@
     <string name="error_auth_required">CRM sync was unauthorized. Your app session was kept; use Logout only if you want to sign in again.</string>
     <string name="error_wifi_required">Sync is restricted to Wi-Fi. Connect to Wi-Fi and try again.</string>
     <string name="permission_required_title">Permission required</string>
-    <string name="permission_call_log_rationale">InfraSpine Recordings needs Call Log access to match recordings with phone calls (number, time, duration, type).</string>
+    <string name="permission_call_log_rationale">InfraSpine Recordings needs Phone and Call Log access to detect completed calls and sync call details.</string>
     <string name="grant_permission">Grant permission</string>
 
     <!-- Sync status labels -->

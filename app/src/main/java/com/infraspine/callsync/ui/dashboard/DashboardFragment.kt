@@ -40,8 +40,10 @@ class DashboardFragment : Fragment() {
     }
 
     private val syncCallLogPermissionLauncher = registerForActivityResult(
-        ActivityResultContracts.RequestPermission()
-    ) { granted ->
+        ActivityResultContracts.RequestMultiplePermissions()
+    ) { grants ->
+        val granted = grants[Manifest.permission.READ_CALL_LOG] == true &&
+            grants[Manifest.permission.READ_PHONE_STATE] == true
         if (!granted) {
             Snackbar.make(binding.root, R.string.error_call_log_permission, Snackbar.LENGTH_LONG).show()
             return@registerForActivityResult
@@ -127,8 +129,13 @@ class DashboardFragment : Fragment() {
     }
 
     private fun startSync() {
-        if (!PermissionHelper.hasCallLogPermission(requireContext())) {
-            syncCallLogPermissionLauncher.launch(Manifest.permission.READ_CALL_LOG)
+        if (!PermissionHelper.hasCallSyncPermissions(requireContext())) {
+            syncCallLogPermissionLauncher.launch(
+                arrayOf(
+                    Manifest.permission.READ_CALL_LOG,
+                    Manifest.permission.READ_PHONE_STATE
+                )
+            )
             return
         }
 

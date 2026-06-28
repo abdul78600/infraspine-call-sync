@@ -5,11 +5,8 @@ import android.net.ConnectivityManager
 import android.net.Network
 import android.net.NetworkCapabilities
 import android.net.NetworkRequest
-import androidx.work.ExistingWorkPolicy
-import androidx.work.OneTimeWorkRequestBuilder
-import androidx.work.WorkManager
+import com.infraspine.callsync.data.prefs.SecureSettingsStore
 import com.infraspine.callsync.domain.util.NetworkDiagnostics
-import java.util.concurrent.TimeUnit
 
 /**
  * Registers a ConnectivityManager.NetworkCallback so that whenever the device
@@ -28,14 +25,13 @@ class RetryOnNetworkRestore(private val context: Context) {
 
     private val networkCallback = object : ConnectivityManager.NetworkCallback() {
         override fun onAvailable(network: Network) {
-            WorkManager.getInstance(context.applicationContext)
-                .enqueueUniqueWork(
-                    AutoSyncWorker.UNIQUE_WORK_NAME,
-                    ExistingWorkPolicy.KEEP,
-                    OneTimeWorkRequestBuilder<AutoSyncWorker>()
-                        .setInitialDelay(5, TimeUnit.SECONDS)
-                        .build()
-                )
+            val settingsStore = SecureSettingsStore(context.applicationContext)
+            if (!settingsStore.autoSyncEnabled || !settingsStore.hasValidSession()) return
+            SyncScheduler.enqueueOneTime(
+                context = context.applicationContext,
+                wifiOnly = settingsStore.syncOnWifiOnly,
+                delaySeconds = SyncScheduler.NETWORK_RESTORED_DELAY_SECONDS
+            )
         }
     }
 

@@ -4,6 +4,7 @@
 
     <!-- Call log matching -->
     <uses-permission android:name="android.permission.READ_CALL_LOG" />
+    <uses-permission android:name="android.permission.READ_PHONE_STATE" />
 
     <!-- Network for upload to CRM -->
     <uses-permission android:name="android.permission.INTERNET" />
@@ -65,6 +66,15 @@
             <intent-filter>
                 <action android:name="android.intent.action.BOOT_COMPLETED" />
                 <action android:name="android.intent.action.USER_UNLOCKED" />
+            </intent-filter>
+        </receiver>
+
+        <receiver
+            android:name=".sync.CallEndedReceiver"
+            android:enabled="true"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.PHONE_STATE" />
             </intent-filter>
         </receiver>
 
