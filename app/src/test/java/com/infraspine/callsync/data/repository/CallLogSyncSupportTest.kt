@@ -180,6 +180,31 @@ class CallLogSyncSupportTest {
     }
 
     @Test
+    fun effectiveCursorUsesRemoteCheckpointWhenLocalCursorIsAhead() {
+        val decision = CallLogSyncSupport.effectiveCursor(
+            local = CallLogSyncCursor(
+                lastSyncedCallStartedAt = 6_000L,
+                lastSyncedAndroidCallLogId = 600L,
+                lastCallLogSyncAt = 222L
+            ),
+            remote = CallLogSyncStateSnapshot(
+                latestExternalCallId = "88",
+                latestCallStartedAt = 5_000L,
+                latestAndroidCallLogId = 88L,
+                totalLogs = 10
+            ),
+            resetRequested = false,
+            initialSyncMode = CallLogInitialSyncMode.FROM_NOW,
+            latestLocalLog = null,
+            syncedAt = 333L
+        )
+
+        assertEquals(88L, decision.queryCursor.lastSyncedAndroidCallLogId)
+        assertEquals(5_000L, decision.queryCursor.lastSyncedCallStartedAt)
+        assertEquals(222L, decision.queryCursor.lastCallLogSyncAt)
+    }
+
+    @Test
     fun shouldRunRecoveryAlwaysForManualTrigger() {
         assertTrue(
             CallLogSyncSupport.shouldRunRecovery(

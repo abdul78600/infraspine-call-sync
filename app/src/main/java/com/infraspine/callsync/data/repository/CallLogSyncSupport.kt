@@ -150,31 +150,14 @@ internal object CallLogSyncSupport {
         if (remote.isEmpty()) {
             return CallLogCursorDecision(queryCursor = local)
         }
-        if (local.isEmpty()) {
-            return CallLogCursorDecision(
-                queryCursor = CallLogSyncCursor(
-                    lastSyncedCallStartedAt = remote.latestCallStartedAt,
-                    lastSyncedAndroidCallLogId = remote.latestAndroidCallLogId,
-                    lastCallLogSyncAt = local.lastCallLogSyncAt
-                )
-            )
-        }
 
-        return if (
-            remote.latestCallStartedAt > local.lastSyncedCallStartedAt ||
-            (remote.latestCallStartedAt == local.lastSyncedCallStartedAt &&
-                remote.latestAndroidCallLogId > local.lastSyncedAndroidCallLogId)
-        ) {
-            CallLogCursorDecision(
-                queryCursor = CallLogSyncCursor(
-                    lastSyncedCallStartedAt = remote.latestCallStartedAt,
-                    lastSyncedAndroidCallLogId = remote.latestAndroidCallLogId,
-                    lastCallLogSyncAt = local.lastCallLogSyncAt
-                )
+        return CallLogCursorDecision(
+            queryCursor = CallLogSyncCursor(
+                lastSyncedCallStartedAt = remote.latestCallStartedAt,
+                lastSyncedAndroidCallLogId = remote.latestAndroidCallLogId,
+                lastCallLogSyncAt = local.lastCallLogSyncAt
             )
-        } else {
-            CallLogCursorDecision(queryCursor = local)
-        }
+        )
     }
 }
 
