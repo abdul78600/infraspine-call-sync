@@ -493,16 +493,22 @@ class SyncRepository(
             var profileKey = settingsStore.activeSyncProfileKey(deviceId)
             var syncStateError: String? = null
             if (!settingsStore.isCallLogResetRequested(profileKey)) {
-                when (val outcome = fetchCallLogSyncState(api, deviceId)) {
+                _syncProgress.value = SyncProgress(current = 0, total = 0, phase = "fetching_call_logs")
+                val stateOutcome = withTimeoutOrNull(CHECK_EXISTING_TIMEOUT_MS) {
+                    fetchCallLogSyncState(api, deviceId)
+                }
+
+                when (stateOutcome) {
                     is SyncStateOutcome.Available -> {
-                        profileKey = resolveProfileKey(deviceId, outcome.state.serverInstanceId, profileKey)
-                        settingsStore.setCallLogSyncState(profileKey, outcome.state)
+                        profileKey = resolveProfileKey(deviceId, stateOutcome.state.serverInstanceId, profileKey)
+                        settingsStore.setCallLogSyncState(profileKey, stateOutcome.state)
                     }
                     SyncStateOutcome.Unauthorized -> {
                         handleUnauthorizedSync()
                         return CallLogSyncStats(authRequired = true)
                     }
-                    is SyncStateOutcome.Error -> syncStateError = outcome.message
+                    is SyncStateOutcome.Error -> syncStateError = stateOutcome.message
+                    null -> syncStateError = "Fetching sync state timed out"
                 }
             }
 
@@ -545,7 +551,11 @@ class SyncRepository(
                 now = syncStartedAt,
                 recoveryIntervalMs = CALL_LOG_RECOVERY_INTERVAL_MS
             )
-            _syncProgress.value = SyncProgress(current = 0, total = 0, phase = "fetching_call_logs")
+            // Progress already set to "fetching_call_logs" before state fetch, 
+            // but we keep it here as well for clarity if state fetch was skipped.
+            if (_syncProgress.value?.phase != "fetching_call_logs") {
+                _syncProgress.value = SyncProgress(current = 0, total = 0, phase = "fetching_call_logs")
+            }
             val cursorFetched = callLogReader.loadAfterCursor(
                 lastSyncedAndroidCallLogId = queryCursor.lastSyncedAndroidCallLogId,
                 lastSyncedCallStartedAt = queryCursor.lastSyncedCallStartedAt
@@ -615,8 +625,12 @@ class SyncRepository(
                 val outcome = withTimeoutOrNull(CHECK_EXISTING_TIMEOUT_MS) {
                     checkExistingCallLogs(api, deviceId, uploadable)
                 } ?: run {
-                    NetworkDiagnostics.logConnectionFailure("check-existing timed out after ${CHECK_EXISTING_TIMEOUT_MS / 1000}s — uploading all")
-                    ExistenceCheckOutcome.NotSupported
+                    // Treat timeout as a transient server error — do NOT fall back to
+                    // uploading everything, because that causes an infinite loop:
+                    // recovery scans keep returning the same already-synced records,
+                    // and every cycle re-uploads them when check-existing times out.
+                    NetworkDiagnostics.logConnectionFailure("check-existing timed out after ${CHECK_EXISTING_TIMEOUT_MS / 1000}s — skipping cycle")
+                    ExistenceCheckOutcome.Error("check-existing timed out after ${CHECK_EXISTING_TIMEOUT_MS / 1000}s")
                 }
                 when (outcome) {
                     is ExistenceCheckOutcome.Available -> {
@@ -849,6 +863,10 @@ class SyncRepository(
         val items = uploadable.map { it.toCheckItem() }
         val chunks = items.chunked(CHECK_EXISTING_BATCH_SIZE)
 
+        // Set progress early so the user sees a determinate bar if there are many logs,
+        // or at least knows we are at 0/1 for a single chunk.
+        _syncProgress.value = SyncProgress(current = 0, total = chunks.size, phase = "checking_call_logs")
+
         val existing = mutableSetOf<String>()
         val missing = mutableSetOf<String>()
         for ((chunkIndex, chunk) in chunks.withIndex()) {
@@ -904,16 +922,12 @@ class SyncRepository(
                 )
             }
 
-            // Advance progress after the chunk fully succeeds so the bar reflects
-            // completed work, not in-flight work. For a single chunk this fires only
-            // after the server responds, so the bar never reads 100% while waiting.
-            if (chunks.size > 1) {
-                _syncProgress.value = SyncProgress(
-                    current = chunkIndex + 1,
-                    total = chunks.size,
-                    phase = "checking_call_logs"
-                )
-            }
+            // Update progress after each chunk
+            _syncProgress.value = SyncProgress(
+                current = chunkIndex + 1,
+                total = chunks.size,
+                phase = "checking_call_logs"
+            )
         }
 
         return ExistenceCheckOutcome.Available(existingRefs = existing, missingRefs = missing)
@@ -1193,10 +1207,11 @@ class SyncRepository(
         private const val CHECK_EXISTING_BATCH_SIZE = 200
         private const val CALL_LOG_SYNC_BATCH_SIZE = 200
 
-        /** Total time budget for the check-existing round-trip(s). If the server
-         *  doesn't respond within this window we fall back to uploading everything
-         *  and let the server deduplicate, so the UI never freezes indefinitely. */
-        private const val CHECK_EXISTING_TIMEOUT_MS = 25_000L
+        /** Total time budget for the check-existing round-trip(s). On timeout we
+         *  return an Error (skip the cycle) — NOT NotSupported — so we never
+         *  fall back to uploading everything. Uploading without deduplication
+         *  causes an infinite re-upload loop via the recovery scan. */
+        private const val CHECK_EXISTING_TIMEOUT_MS = 45_000L
         private const val APP_OPEN_SYNC_THROTTLE_MS = 15_000L
         private const val CALL_LOG_RECOVERY_WINDOW_MS = 7L * 24L * 60L * 60L * 1000L
         private const val CALL_LOG_RECOVERY_INTERVAL_MS = 24L * 60L * 60L * 1000L

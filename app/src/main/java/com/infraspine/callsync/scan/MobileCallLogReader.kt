@@ -44,7 +44,8 @@ class MobileCallLogReader(private val context: Context) {
         load(
             selection = selection,
             selectionArgs = selectionArgs,
-            sortOrder = sortOrder
+            sortOrder = sortOrder,
+            limit = FETCH_LIMIT
         )
     }
 
@@ -53,12 +54,18 @@ class MobileCallLogReader(private val context: Context) {
 
     suspend fun loadSince(startedAtMillis: Long): List<MobileCallLog> = withContext(Dispatchers.IO) {
         if (startedAtMillis <= 0L) {
-            load(selection = null, selectionArgs = null, sortOrder = "${CallLog.Calls.DATE} ASC, ${CallLog.Calls._ID} ASC")
+            load(
+                selection = null,
+                selectionArgs = null,
+                sortOrder = "${CallLog.Calls.DATE} ASC, ${CallLog.Calls._ID} ASC",
+                limit = FETCH_LIMIT
+            )
         } else {
             load(
                 selection = "${CallLog.Calls.DATE} >= ?",
                 selectionArgs = arrayOf(startedAtMillis.toString()),
-                sortOrder = "${CallLog.Calls.DATE} ASC, ${CallLog.Calls._ID} ASC"
+                sortOrder = "${CallLog.Calls.DATE} ASC, ${CallLog.Calls._ID} ASC",
+                limit = FETCH_LIMIT
             )
         }
     }
@@ -101,7 +108,8 @@ class MobileCallLogReader(private val context: Context) {
     private fun load(
         selection: String?,
         selectionArgs: Array<String>?,
-        sortOrder: String
+        sortOrder: String,
+        limit: Int = FETCH_LIMIT
     ): List<MobileCallLog> {
         val logs = mutableListOf<MobileCallLog>()
 
@@ -111,7 +119,7 @@ class MobileCallLogReader(private val context: Context) {
                 PROJECTION,
                 selection,
                 selectionArgs,
-                sortOrder
+                "$sortOrder LIMIT $limit"
             )?.use { cursor ->
                 val idIdx = cursor.getColumnIndex(CallLog.Calls._ID)
                 val numberIdx = cursor.getColumnIndex(CallLog.Calls.NUMBER)
@@ -148,5 +156,10 @@ class MobileCallLogReader(private val context: Context) {
             CallLog.Calls.DURATION,
             CallLog.Calls.CACHED_NAME
         )
+
+        /** Max call logs fetched per sync cycle. Caps memory use and content-provider
+         *  query time on devices with large call histories. The cursor advances after
+         *  each successful cycle so subsequent syncs pick up where this one stopped. */
+        const val FETCH_LIMIT = 2000
     }
 }
