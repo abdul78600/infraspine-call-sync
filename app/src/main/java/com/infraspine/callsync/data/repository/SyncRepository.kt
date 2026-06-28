@@ -1201,10 +1201,34 @@ class SyncRepository(
     private fun String.toEpochMillisOrZero(): Long =
         toLongOrNull() ?: runCatching { Instant.parse(this).toEpochMilli() }.getOrDefault(0L)
 
-    private fun handleUnauthorizedSync() {
-        NetworkDiagnostics.logCallLogSyncSkipped(
-            "server returned unauthorized; keeping local session until manual logout"
-        )
+    /**
+     * Called when the server rejects a sync request with 401. First attempts a
+     * silent re-login using the password saved at login — if the token simply
+     * expired and the credentials are still valid, the next request (or the
+     * remainder of this app-open pass) succeeds with the fresh token and the
+     * user never notices. If the re-login fails (password changed or revoked),
+     * the session is genuinely dead, so we log out: the next session check
+     * (MainActivity start destination / syncPending) routes the user to login.
+     */
+    private suspend fun handleUnauthorizedSync() {
+        val repo = authRepository
+        if (repo == null) {
+            NetworkDiagnostics.logCallLogSyncSkipped("server returned 401 but no auth repository is wired")
+            return
+        }
+        val reloggedIn = try {
+            repo.autoReLogin()
+        } catch (e: CancellationException) {
+            throw e
+        } catch (t: Throwable) {
+            false
+        }
+        if (reloggedIn) {
+            NetworkDiagnostics.logCallLogSyncSkipped("server returned 401 — silent re-login succeeded; next sync uses the fresh token")
+        } else {
+            NetworkDiagnostics.logCallLogSyncSkipped("server returned 401 — silent re-login failed; logging out")
+            repo.logout()
+        }
     }
 
     companion object {
