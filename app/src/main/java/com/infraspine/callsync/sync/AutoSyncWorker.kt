@@ -92,6 +92,10 @@ class AutoSyncWorker(
         }
     }
 
+    // Required when the work request uses setExpedited() — WorkManager calls this
+    // synchronously to get a ForegroundInfo to show before doWork() is even called.
+    override suspend fun getForegroundInfo(): ForegroundInfo = buildForegroundInfo(null)
+
     private fun buildForegroundInfo(progress: SyncProgress?): ForegroundInfo {
         val notification = buildNotification(progress)
         return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {

@@ -24,7 +24,12 @@ import java.util.concurrent.TimeUnit
 object SyncScheduler {
 
     private const val PERIODIC_INTERVAL_MINUTES = 15L
-    const val CALL_ENDED_DELAY_SECONDS = 20L
+    // Small delay after PHONE_STATE IDLE before triggering the verification worker,
+    // giving the CallLog provider a moment to persist the finished call row.
+    // Kept short (5 s) so OEM hibernation managers cannot freeze the process
+    // before the work is dispatched. The content-URI job (CallLogChangeJobService)
+    // is the primary trigger; this is the secondary broadcast path.
+    const val CALL_ENDED_DELAY_SECONDS = 5L
     const val NETWORK_RESTORED_DELAY_SECONDS = 5L
 
     fun apply(context: Context, autoSyncEnabled: Boolean, wifiOnly: Boolean) {
@@ -55,11 +60,21 @@ object SyncScheduler {
         delaySeconds: Long,
         replaceExisting: Boolean = false
     ) {
-        val request = OneTimeWorkRequestBuilder<AutoSyncWorker>()
-            .setInitialDelay(delaySeconds, TimeUnit.SECONDS)
+        val builder = OneTimeWorkRequestBuilder<AutoSyncWorker>()
             .setConstraints(networkConstraints(wifiOnly))
             .setBackoffCriteria(BackoffPolicy.LINEAR, WorkRequest.MIN_BACKOFF_MILLIS, TimeUnit.MILLISECONDS)
-            .build()
+
+        if (delaySeconds > 0L) {
+            // Expedited work cannot have an initial delay — use a normal request.
+            builder.setInitialDelay(delaySeconds, TimeUnit.SECONDS)
+        } else {
+            // Expedited work bypasses OEM background-process hibernation (e.g. Transsion
+            // Hiber/sceneManager) and is allowed to run even when starting from background.
+            // AutoSyncWorker overrides getForegroundInfo() so this is safe.
+            builder.setExpedited(androidx.work.OutOfQuotaPolicy.RUN_AS_NON_EXPEDITED_WORK_REQUEST)
+        }
+
+        val request = builder.build()
 
         WorkManager.getInstance(context.applicationContext)
             .enqueueUniqueWork(

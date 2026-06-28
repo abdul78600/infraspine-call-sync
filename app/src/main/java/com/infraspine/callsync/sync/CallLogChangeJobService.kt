@@ -46,6 +46,10 @@ class CallLogChangeJobService : JobService() {
             replaceExisting = false  // KEEP: don't interrupt a sync already in flight
         )
 
+        // Content-URI jobs are one-shot — reschedule immediately so the next
+        // call log change is also detected without requiring an app restart.
+        SyncScheduler.scheduleCallLogChangeJob(appContext)
+
         jobFinished(params, false)
         return false  // work is done synchronously
     }
