@@ -38,7 +38,10 @@ class CrmApiFactory(private val settingsStore: SecureSettingsStore) {
         NetworkDiagnostics.logConfiguredServer(normalized)
 
         val client = OkHttpClient.Builder()
-            .connectTimeout(30, TimeUnit.SECONDS)
+            // Short connect timeout so an unreachable/down server fails fast instead
+            // of leaving the sync UI "stuck" on a phase for 30s per attempt. The TCP
+            // handshake to any reachable (incl. LAN) server completes well under 10s.
+            .connectTimeout(10, TimeUnit.SECONDS)
             .readTimeout(60, TimeUnit.SECONDS)
             .writeTimeout(120, TimeUnit.SECONDS)
             .addInterceptor(AuthInterceptor(settingsStore))

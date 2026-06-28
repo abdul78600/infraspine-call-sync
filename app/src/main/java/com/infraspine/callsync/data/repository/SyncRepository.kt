@@ -214,9 +214,17 @@ class SyncRepository(
     }
 
     suspend fun syncCallLogsOnly(trigger: CallLogSyncTrigger = CallLogSyncTrigger.MANUAL): CallLogSyncStats {
-        val deviceId = DeviceIdProvider.getOrCreate(context.applicationContext, settingsStore)
-        val api = apiFactory.getService()
-        return syncCallLogs(api, deviceId, trigger)
+        try {
+            val deviceId = DeviceIdProvider.getOrCreate(context.applicationContext, settingsStore)
+            val api = apiFactory.getService()
+            return syncCallLogs(api, deviceId, trigger)
+        } finally {
+            // syncCallLogs sets _syncProgress through several phases but never clears it
+            // on its own. Without this, the app-open / login call-log sync (which goes
+            // through here, not syncPending) leaves the progress card stuck forever on
+            // "Fetching call logs from device…" even after the sync completes.
+            _syncProgress.value = null
+        }
     }
 
     suspend fun refreshCallLogSyncState() {

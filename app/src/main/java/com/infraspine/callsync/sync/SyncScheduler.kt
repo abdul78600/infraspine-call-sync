@@ -17,7 +17,7 @@ import java.util.concurrent.TimeUnit
  */
 object SyncScheduler {
 
-    private const val INTERVAL_MINUTES = 15L
+    private const val INTERVAL_MINUTES = 2L
 
     fun apply(context: Context, autoSyncEnabled: Boolean, wifiOnly: Boolean) {
         val workManager = WorkManager.getInstance(context.applicationContext)
