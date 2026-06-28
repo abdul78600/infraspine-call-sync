@@ -6,19 +6,24 @@ import android.content.pm.PackageManager
 import androidx.core.content.ContextCompat
 import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
-import com.infraspine.callsync.data.prefs.CallLogSyncCursor
 import com.infraspine.callsync.data.prefs.SecureSettingsStore
-import com.infraspine.callsync.domain.util.DeviceIdProvider
 import com.infraspine.callsync.domain.util.NetworkDiagnostics
-import com.infraspine.callsync.scan.MobileCallLog
-import com.infraspine.callsync.scan.MobileCallLogReader
-import kotlinx.coroutines.delay
 
 /**
- * Runs after a PHONE_STATE -> IDLE event. It waits for the CallLog provider to
- * expose the finished call and only then queues the real sync worker. This keeps
- * duplicate IDLE broadcasts cheap and avoids declaring success before Android
- * has actually written the call-log row.
+ * Runs after [CallEndedReceiver] detects a PHONE_STATE → IDLE transition.
+ * The 20-second initial delay (set in [SyncScheduler.enqueueCallEndedCheck])
+ * gives the CallLog provider time to persist the finished call row before the
+ * real sync worker reads it.
+ *
+ * This worker's only job is to enqueue [AutoSyncWorker] (ON_DEMAND). The sync
+ * worker itself determines — via the cursor and check-existing endpoint — whether
+ * there is genuinely new data to upload. We do NOT attempt to pre-check the
+ * cursor here: that logic is fragile (race between cursor advance and provider
+ * write timing) and was the root cause of missed syncs on the second call.
+ *
+ * The primary call-detection mechanism is [CallLogChangeJobService] (content-URI
+ * trigger via JobScheduler). This worker is a secondary path for the [PHONE_STATE]
+ * broadcast that some OEM ROMs deliver inconsistently.
  */
 class CallEndedSyncWorker(
     private val appContext: Context,
@@ -29,63 +34,30 @@ class CallEndedSyncWorker(
         if (!hasPermission(Manifest.permission.READ_CALL_LOG) ||
             !hasPermission(Manifest.permission.READ_PHONE_STATE)
         ) {
-            NetworkDiagnostics.logCallLogSyncSkipped("call-ended verification stopped because phone/call-log permission is missing")
+            NetworkDiagnostics.logCallLogSyncSkipped("call-ended sync skipped: missing call-log/phone-state permission")
             return Result.success()
         }
 
         val settingsStore = SecureSettingsStore(appContext)
         if (!settingsStore.autoSyncEnabled || !settingsStore.hasValidSession()) {
-            NetworkDiagnostics.logCallLogSyncSkipped("call-ended verification stopped because auto sync/session is not active")
+            NetworkDiagnostics.logCallLogSyncSkipped("call-ended sync skipped: auto-sync off or no valid session")
             return Result.success()
         }
 
-        val reader = MobileCallLogReader(appContext)
-        for (attempt in 1..CALL_LOG_PROVIDER_POLL_ATTEMPTS) {
-            val latest = reader.loadLatestCallLog()
-            if (latest == null) {
-                NetworkDiagnostics.logCallLogSyncSkipped(
-                    "call-ended verification attempt $attempt: latest call log not visible yet"
-                )
-                if (attempt < CALL_LOG_PROVIDER_POLL_ATTEMPTS) delay(CALL_LOG_PROVIDER_POLL_DELAY_MS)
-                continue
-            }
-
-            val deviceId = DeviceIdProvider.getOrCreate(appContext, settingsStore)
-            val profileKey = settingsStore.activeSyncProfileKey(deviceId)
-            val cursor = settingsStore.callLogCursor(profileKey)
-            if (!latest.isNewerThan(cursor)) {
-                NetworkDiagnostics.logCallLogSyncSkipped(
-                    "call-ended verification attempt $attempt: latest call log is already covered by cursor"
-                )
-                if (attempt < CALL_LOG_PROVIDER_POLL_ATTEMPTS) delay(CALL_LOG_PROVIDER_POLL_DELAY_MS)
-                continue
-            }
-
-            NetworkDiagnostics.logCallLogSyncSkipped("call-ended verification found new call log; queued one-time sync")
-            SyncScheduler.enqueueOneTime(
-                context = appContext,
-                wifiOnly = settingsStore.syncOnWifiOnly,
-                delaySeconds = 0L,
-                replaceExisting = true
-            )
-            return Result.success()
-        }
-
-        NetworkDiagnostics.logCallLogSyncSkipped("call-ended verification gave up waiting for an unprocessed CallLog provider row")
+        NetworkDiagnostics.logCallLogSyncSkipped("call-ended sync: queuing on-demand sync after call")
+        SyncScheduler.enqueueOneTime(
+            context = appContext,
+            wifiOnly = settingsStore.syncOnWifiOnly,
+            delaySeconds = 0L,
+            replaceExisting = false  // KEEP: don't interrupt a sync already in flight
+        )
         return Result.success()
     }
-
-    private fun MobileCallLog.isNewerThan(cursor: CallLogSyncCursor): Boolean =
-        cursor.isEmpty() ||
-            startedAt > cursor.lastSyncedCallStartedAt ||
-            (startedAt == cursor.lastSyncedCallStartedAt && id > cursor.lastSyncedAndroidCallLogId)
 
     private fun hasPermission(permission: String): Boolean =
         ContextCompat.checkSelfPermission(appContext, permission) == PackageManager.PERMISSION_GRANTED
 
     companion object {
         const val UNIQUE_WORK_NAME = "call_ended_sync_verification_work"
-        private const val CALL_LOG_PROVIDER_POLL_ATTEMPTS = 6
-        private const val CALL_LOG_PROVIDER_POLL_DELAY_MS = 10_000L
     }
 }

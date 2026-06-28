@@ -23,6 +23,9 @@ class BootCompletedReceiver : BroadcastReceiver() {
                 autoSyncEnabled = settingsStore.autoSyncEnabled && settingsStore.hasValidSession(),
                 wifiOnly = settingsStore.syncOnWifiOnly
             )
+            // Content-URI JobScheduler trigger does not survive reboots unless
+            // setPersisted(true) is used AND we reschedule it here on boot.
+            SyncScheduler.scheduleCallLogChangeJob(appContext)
         }
     }
 }

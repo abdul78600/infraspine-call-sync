@@ -26,6 +26,13 @@ class CallSyncApplication : Application() {
         )
 
         retryOnNetworkRestore.register()
+
+        // Schedule a JobScheduler content-URI trigger on CallLog.Calls so a sync
+        // fires whenever a new call-log row is written — even when the app is dead.
+        // This is the primary, reliable call-detection path; PHONE_STATE broadcast
+        // is kept as a secondary path for OEM ROMs that suppress content-provider
+        // change events for certain call types.
+        SyncScheduler.scheduleCallLogChangeJob(this)
     }
 
     override fun onTerminate() {
