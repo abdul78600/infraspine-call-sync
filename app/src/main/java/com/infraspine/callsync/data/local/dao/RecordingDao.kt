@@ -12,8 +12,18 @@ import com.infraspine.callsync.domain.model.CallType
 import com.infraspine.callsync.domain.model.SyncStatus
 import kotlinx.coroutines.flow.Flow
 
+data class RecordingCheckMetadata(
+    val fileUri: String,
+    val fileSize: Long,
+    val syncStatus: SyncStatus,
+    val id: Long
+)
+
 @Dao
 interface RecordingDao {
+
+    @Query("SELECT fileUri, fileSize, syncStatus, id FROM recordings")
+    suspend fun getAllCheckMetadata(): List<RecordingCheckMetadata>
 
     /**
      * Ignores on conflict so re-scanning the same folder never creates duplicate rows
@@ -102,7 +112,7 @@ interface RecordingDao {
         durationSeconds: Long?,
         callType: CallType,
         status: SyncStatus
-    )
+    ): Int
 
     /** Re-queues all SYNCED recordings as PENDING for "Reset sync history". */
     @Query("UPDATE recordings SET syncStatus = 'PENDING', uploadedAt = NULL, serverRecordingId = NULL, errorMessage = NULL WHERE syncStatus = 'SYNCED'")

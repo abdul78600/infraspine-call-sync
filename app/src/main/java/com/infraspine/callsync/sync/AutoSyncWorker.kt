@@ -25,10 +25,15 @@ class AutoSyncWorker(
 
     override suspend fun doWork(): Result {
         val app = appContext as CallSyncApplication
-        val syncRepository = app.container.syncRepository
+        val container = app.container
+        val recordingRepository = container.recordingRepository
+        val syncRepository = container.syncRepository
 
         // Show initial foreground notification so Android lets us run
         setForeground(buildForegroundInfo(null))
+
+        // 1. Scan for new files first, otherwise we only sync what was found while app was open
+        recordingRepository.scanAndMatch()
 
         var workerResult: Result = Result.success()
 
@@ -40,15 +45,32 @@ class AutoSyncWorker(
                 }
             }
 
-            workerResult = when (syncRepository.syncPending(CallLogSyncTrigger.PERIODIC)) {
+            val syncResult = syncRepository.syncPending(CallLogSyncTrigger.PERIODIC)
+            
+            workerResult = when (syncResult) {
                 is SyncResult.Completed,
                 SyncResult.NothingToSync -> Result.success()
 
                 SyncResult.NetworkUnavailable,
                 SyncResult.WifiRequired -> Result.retry()
 
-                SyncResult.ApiNotConfigured,
-                SyncResult.AuthRequired -> Result.success()
+                SyncResult.ApiNotConfigured -> Result.success()
+
+                SyncResult.AuthRequired -> {
+                    val reloggedIn = runCatching { container.authRepository.autoReLogin() }.getOrElse { false }
+                    if (reloggedIn) {
+                        // Retry once with new token
+                        when (syncRepository.syncPending(CallLogSyncTrigger.PERIODIC)) {
+                            is SyncResult.Completed,
+                            SyncResult.NothingToSync -> Result.success()
+                            SyncResult.NetworkUnavailable,
+                            SyncResult.WifiRequired -> Result.retry()
+                            else -> Result.success()
+                        }
+                    } else {
+                        Result.success()
+                    }
+                }
             }
 
             progressJob.cancel()

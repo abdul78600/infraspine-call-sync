@@ -37,11 +37,12 @@ data class CallLogPage(
 class CallLogMatcher(private val context: Context) {
 
     /**
-     * Loads the device call log once. Call this on a background thread and reuse
-     * the result across multiple [match] calls during a single scan to avoid
-     * re-querying the content provider per file.
+     * Loads recent device call logs (default last 365 days). Call this on a background
+     * thread and reuse the result across multiple [match] calls during a single scan.
+     * 365 days ensures UNMATCHED recordings — e.g. scanned while READ_CALL_LOG was
+     * denied and later rematched — can always find their call log counterpart.
      */
-    suspend fun loadCallLog(): List<CallLogEntry> = withContext(Dispatchers.IO) {
+    suspend fun loadCallLog(days: Int = 365): List<CallLogEntry> = withContext(Dispatchers.IO) {
         val entries = mutableListOf<CallLogEntry>()
         val projection = arrayOf(
             CallLog.Calls.NUMBER,
@@ -50,12 +51,14 @@ class CallLogMatcher(private val context: Context) {
             CallLog.Calls.TYPE
         )
 
+        val since = System.currentTimeMillis() - (days * 24L * 60 * 60 * 1000)
+
         runCatching {
             context.contentResolver.query(
                 CallLog.Calls.CONTENT_URI,
                 projection,
-                null,
-                null,
+                "${CallLog.Calls.DATE} >= ?",
+                arrayOf(since.toString()),
                 "${CallLog.Calls.DATE} DESC"
             )?.use { cursor ->
                 val numberIdx = cursor.getColumnIndex(CallLog.Calls.NUMBER)

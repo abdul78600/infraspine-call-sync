@@ -159,21 +159,38 @@ class DashboardFragment : Fragment() {
 
         viewModel.isSyncing.observe(viewLifecycleOwner) { syncing ->
             binding.buttonSyncNow.isEnabled = !syncing
-            binding.buttonSyncNow.text = getString(if (syncing) R.string.sync_in_progress else R.string.sync_now)
-            if (!syncing) binding.cardSyncProgress.visibility = View.GONE
+            binding.buttonSyncNow.text = getString(if (syncing) R.string.preparing_sync else R.string.sync_now)
+            if (syncing && viewModel.syncProgress.value == null) {
+                binding.cardSyncProgress.visibility = View.VISIBLE
+                binding.textSyncProgressDetail.text = "Preparing sync…"
+                binding.progressBarSync.isIndeterminate = true
+            } else if (!syncing) {
+                binding.cardSyncProgress.visibility = View.GONE
+            }
         }
 
         viewModel.syncProgress.observe(viewLifecycleOwner) { progress ->
-            if (progress != null && progress.total > 0) {
+            if (progress != null) {
                 binding.cardSyncProgress.visibility = View.VISIBLE
-                binding.textSyncProgressDetail.text =
-                    "Uploading ${progress.current + 1} of ${progress.total} recordings…"
-                binding.progressBarSync.max = progress.total
-                binding.progressBarSync.progress = progress.current + 1
-            } else if (viewModel.isSyncing.value == true) {
-                binding.cardSyncProgress.visibility = View.VISIBLE
-                binding.textSyncProgressDetail.text = "Preparing sync…"
-                binding.progressBarSync.progress = 0
+                val text = when (progress.phase) {
+                    "fetching_call_logs" -> "Fetching call logs from device…"
+                    "checking_call_logs" -> if (progress.total > 1)
+                        "Checking call logs with server… (${progress.current}/${progress.total})"
+                    else
+                        "Checking call logs with server…"
+                    "call_logs" -> "Syncing ${progress.current + 1} of ${progress.total} call logs…"
+                    "checking_recordings" -> "Checking recordings with server…"
+                    "recordings" -> "Uploading ${progress.current + 1} of ${progress.total} recordings…"
+                    else -> "Syncing…"
+                }
+                binding.textSyncProgressDetail.text = text
+                if (progress.total > 0) {
+                    binding.progressBarSync.isIndeterminate = false
+                    binding.progressBarSync.max = progress.total
+                    binding.progressBarSync.progress = progress.current + 1
+                } else {
+                    binding.progressBarSync.isIndeterminate = true
+                }
             } else {
                 binding.cardSyncProgress.visibility = View.GONE
             }

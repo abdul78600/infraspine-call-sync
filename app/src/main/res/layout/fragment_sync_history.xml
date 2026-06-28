@@ -21,7 +21,7 @@
         android:layout_weight="1"
         android:gravity="center"
         android:padding="32dp"
-        android:text="No sync history yet.\nSync your recordings to see logs here."
+        android:text="@string/no_sync_history_found"
         android:textColor="@color/text_secondary"
         android:textSize="14sp"
         android:visibility="gone" />

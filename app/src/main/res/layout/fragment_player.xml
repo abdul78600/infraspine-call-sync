@@ -84,7 +84,7 @@
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
                     android:layout_weight="1"
-                    android:text="Sync Status"
+                    android:text="@string/sync_status_label"
                     android:textColor="@color/text_secondary"
                     android:textSize="12sp" />
 
@@ -100,7 +100,7 @@
                     android:textStyle="bold"
                     android:textColor="@color/white"
                     android:background="@drawable/bg_status_chip"
-                    android:text="Pending" />
+                    android:text="@string/status_pending" />
 
             </LinearLayout>
 
@@ -113,7 +113,7 @@
                 android:gravity="top"
                 android:layout_marginTop="10dp"
                 android:padding="10dp"
-                android:background="#1FDC2626"
+                android:background="@color/status_failed_bg"
                 android:visibility="gone">
 
                 <ImageView

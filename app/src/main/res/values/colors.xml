@@ -27,6 +27,7 @@
     <color name="call_unknown">#6B7280</color>
 
     <color name="divider">#E5E7EB</color>
+    <color name="status_failed_bg">#1FDC2626</color>
     <color name="white">#FFFFFF</color>
     <color name="black">#000000</color>
 

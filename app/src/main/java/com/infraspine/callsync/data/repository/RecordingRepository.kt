@@ -98,25 +98,36 @@ class RecordingRepository(
             emptyList()
         }
 
-        var newCount = 0
-        for (file in scannedFiles) {
-            val existing = dao.findByUriAndSize(file.uri, file.size)
-            if (existing != null && existing.syncStatus == SyncStatus.UNMATCHED && callLogAvailable) {
-                val rematch = callLogMatcher.match(file.lastModified, callLog).entry
-                if (rematch != null) {
-                    dao.updateUnmatchedRecordingMatch(
-                        id = existing.id,
-                        phoneNumber = rematch.phoneNumber,
-                        callStartedAt = rematch.startedAt,
-                        durationSeconds = rematch.durationSeconds,
-                        callType = rematch.callType,
-                        status = SyncStatus.PENDING
-                    )
-                    newCount++
-                }
-            }
-            if (existing != null) continue // duplicate — already tracked, skip silently
+        // Optimization: load all existing recording metadata to avoid O(N) DB lookups in the loop
+        val existingMeta = dao.getAllCheckMetadata()
+            .associateBy { it.fileUri to it.fileSize }
 
+        var newCount = 0
+        val toInsert = mutableListOf<RecordingEntity>()
+
+        for (file in scannedFiles) {
+            val existing = existingMeta[file.uri to file.size]
+
+            if (existing != null) {
+                // If it exists but is UNMATCHED, try to rematch it
+                if (existing.syncStatus == SyncStatus.UNMATCHED && callLogAvailable) {
+                    val rematch = callLogMatcher.match(file.lastModified, callLog).entry
+                    if (rematch != null) {
+                        val updated = dao.updateUnmatchedRecordingMatch(
+                            id = existing.id,
+                            phoneNumber = rematch.phoneNumber,
+                            callStartedAt = rematch.startedAt,
+                            durationSeconds = rematch.durationSeconds,
+                            callType = rematch.callType,
+                            status = SyncStatus.PENDING
+                        )
+                        if (updated > 0) newCount++
+                    }
+                }
+                continue // Already tracked
+            }
+
+            // New recording: try to match and prepare for insertion
             val matchResult = if (callLogAvailable) {
                 callLogMatcher.match(file.lastModified, callLog)
             } else {
@@ -124,7 +135,7 @@ class RecordingRepository(
             }
             val matchedEntry = matchResult?.entry
 
-            val entity = RecordingEntity(
+            toInsert += RecordingEntity(
                 fileUri = file.uri,
                 fileName = file.name,
                 fileSize = file.size,
@@ -139,13 +150,14 @@ class RecordingRepository(
                 serverRecordingId = null,
                 errorMessage = null
             )
+        }
 
-            val insertedId = dao.insert(entity)
-            if (insertedId != -1L) newCount++
+        if (toInsert.isNotEmpty()) {
+            val ids = dao.insertAll(toInsert)
+            newCount += ids.count { it != -1L }
         }
 
         return if (!callLogAvailable) {
-            // Files were still scanned and stored as Unmatched; surface the permission gap to the user.
             ScanResult.CallLogPermissionDenied
         } else {
             ScanResult.Success(newRecordingsFound = newCount, totalScanned = scannedFiles.size)
