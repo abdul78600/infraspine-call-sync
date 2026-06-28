@@ -26,20 +26,24 @@ class MobileCallLogReader(private val context: Context) {
         lastSyncedCallStartedAt: Long
     ): List<MobileCallLog> = withContext(Dispatchers.IO) {
         val selection = when {
-            lastSyncedAndroidCallLogId > 0L -> "${CallLog.Calls._ID} > ?"
+            lastSyncedCallStartedAt > 0L && lastSyncedAndroidCallLogId > 0L ->
+                "(${CallLog.Calls.DATE} > ? OR (${CallLog.Calls.DATE} = ? AND ${CallLog.Calls._ID} > ?))"
             lastSyncedCallStartedAt > 0L -> "${CallLog.Calls.DATE} >= ?"
+            lastSyncedAndroidCallLogId > 0L -> "${CallLog.Calls._ID} > ?"
             else -> null
         }
         val selectionArgs = when {
-            lastSyncedAndroidCallLogId > 0L -> arrayOf(lastSyncedAndroidCallLogId.toString())
+            lastSyncedCallStartedAt > 0L && lastSyncedAndroidCallLogId > 0L ->
+                arrayOf(
+                    lastSyncedCallStartedAt.toString(),
+                    lastSyncedCallStartedAt.toString(),
+                    lastSyncedAndroidCallLogId.toString()
+                )
             lastSyncedCallStartedAt > 0L -> arrayOf(lastSyncedCallStartedAt.toString())
+            lastSyncedAndroidCallLogId > 0L -> arrayOf(lastSyncedAndroidCallLogId.toString())
             else -> null
         }
-        val sortOrder = if (lastSyncedAndroidCallLogId > 0L) {
-            "${CallLog.Calls._ID} ASC"
-        } else {
-            "${CallLog.Calls.DATE} ASC, ${CallLog.Calls._ID} ASC"
-        }
+        val sortOrder = "${CallLog.Calls.DATE} ASC, ${CallLog.Calls._ID} ASC"
 
         load(
             selection = selection,

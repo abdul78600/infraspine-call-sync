@@ -157,7 +157,30 @@ class CallLogSyncSupportTest {
     }
 
     @Test
-    fun shouldRunRecoveryAlwaysForManualAndAppOpenTriggers() {
+    fun effectiveCursorUsesRemoteCheckpointWhenDateIsNewerEvenIfIdIsLower() {
+        val decision = CallLogSyncSupport.effectiveCursor(
+            local = CallLogSyncCursor(
+                lastSyncedCallStartedAt = 4_000L,
+                lastSyncedAndroidCallLogId = 500L
+            ),
+            remote = CallLogSyncStateSnapshot(
+                latestExternalCallId = "88",
+                latestCallStartedAt = 5_000L,
+                latestAndroidCallLogId = 88L,
+                totalLogs = 10
+            ),
+            resetRequested = false,
+            initialSyncMode = CallLogInitialSyncMode.FROM_NOW,
+            latestLocalLog = null,
+            syncedAt = 333L
+        )
+
+        assertEquals(88L, decision.queryCursor.lastSyncedAndroidCallLogId)
+        assertEquals(5_000L, decision.queryCursor.lastSyncedCallStartedAt)
+    }
+
+    @Test
+    fun shouldRunRecoveryAlwaysForManualTrigger() {
         assertTrue(
             CallLogSyncSupport.shouldRunRecovery(
                 trigger = CallLogSyncTrigger.MANUAL,
@@ -166,18 +189,26 @@ class CallLogSyncSupportTest {
                 recoveryIntervalMs = 86_400_000L
             )
         )
-        assertTrue(
-            CallLogSyncSupport.shouldRunRecovery(
-                trigger = CallLogSyncTrigger.APP_OPEN,
-                lastRecoveryAt = 10_000L,
-                now = 20_000L,
-                recoveryIntervalMs = 86_400_000L
-            )
-        )
     }
 
     @Test
-    fun shouldRunRecoveryForPeriodicOnlyWhenDue() {
+    fun shouldRunRecoveryForAppOpenAndPeriodicOnlyWhenDue() {
+        assertFalse(
+            CallLogSyncSupport.shouldRunRecovery(
+                trigger = CallLogSyncTrigger.APP_OPEN,
+                lastRecoveryAt = 15_000L,
+                now = 20_000L,
+                recoveryIntervalMs = 10_000L
+            )
+        )
+        assertTrue(
+            CallLogSyncSupport.shouldRunRecovery(
+                trigger = CallLogSyncTrigger.APP_OPEN,
+                lastRecoveryAt = 5_000L,
+                now = 20_000L,
+                recoveryIntervalMs = 10_000L
+            )
+        )
         assertFalse(
             CallLogSyncSupport.shouldRunRecovery(
                 trigger = CallLogSyncTrigger.PERIODIC,

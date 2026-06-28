@@ -98,9 +98,9 @@ internal object CallLogSyncSupport {
     ): Boolean =
         when (trigger) {
             CallLogSyncTrigger.MANUAL,
-            CallLogSyncTrigger.LOGIN,
-            CallLogSyncTrigger.APP_OPEN -> true
+            CallLogSyncTrigger.LOGIN -> true
 
+            CallLogSyncTrigger.APP_OPEN,
             CallLogSyncTrigger.PERIODIC ->
                 lastRecoveryAt <= 0L || now - lastRecoveryAt >= recoveryIntervalMs
         }
@@ -161,9 +161,9 @@ internal object CallLogSyncSupport {
         }
 
         return if (
-            remote.latestAndroidCallLogId > local.lastSyncedAndroidCallLogId ||
-            (remote.latestAndroidCallLogId == local.lastSyncedAndroidCallLogId &&
-                remote.latestCallStartedAt > local.lastSyncedCallStartedAt)
+            remote.latestCallStartedAt > local.lastSyncedCallStartedAt ||
+            (remote.latestCallStartedAt == local.lastSyncedCallStartedAt &&
+                remote.latestAndroidCallLogId > local.lastSyncedAndroidCallLogId)
         ) {
             CallLogCursorDecision(
                 queryCursor = CallLogSyncCursor(

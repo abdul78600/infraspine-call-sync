@@ -497,7 +497,9 @@ class SyncRepository(
             return CallLogSyncStats()
         }
 
+        var retriedAfterUnauthorized = false
         try {
+            syncAttempt@ while (true) {
             var profileKey = settingsStore.activeSyncProfileKey(deviceId)
             var syncStateError: String? = null
             if (!settingsStore.isCallLogResetRequested(profileKey)) {
@@ -512,7 +514,10 @@ class SyncRepository(
                         settingsStore.setCallLogSyncState(profileKey, stateOutcome.state)
                     }
                     SyncStateOutcome.Unauthorized -> {
-                        handleUnauthorizedSync()
+                        if (!retriedAfterUnauthorized && handleUnauthorizedSync()) {
+                            retriedAfterUnauthorized = true
+                            continue@syncAttempt
+                        }
                         return CallLogSyncStats(authRequired = true)
                     }
                     is SyncStateOutcome.Error -> syncStateError = stateOutcome.message
@@ -575,7 +580,7 @@ class SyncRepository(
                 emptyList()
             }
             val fetched = CallLogSyncSupport.mergeFetchedLogs(cursorFetched, recoveryFetched)
-            val cursorAdvanceLog = cursorFetched.maxByOrNull { it.id }
+            val cursorAdvanceLog = cursorFetched.maxWithOrNull(CALL_LOG_CURSOR_ORDER)
             if (fetched.isEmpty()) {
                 persistCallLogCursorAfterSuccessfulPass(
                     profileKey = profileKey,
@@ -656,7 +661,10 @@ class SyncRepository(
                         // Endpoint not deployed yet — upload everything, as before.
                     }
                     ExistenceCheckOutcome.Unauthorized -> {
-                        handleUnauthorizedSync()
+                        if (!retriedAfterUnauthorized && handleUnauthorizedSync()) {
+                            retriedAfterUnauthorized = true
+                            continue@syncAttempt
+                        }
                         NetworkDiagnostics.logCallLogSync(
                             fetched.size,
                             0,
@@ -749,7 +757,10 @@ class SyncRepository(
                     NetworkDiagnostics.logConnectionFailure(requestError)
 
                     if (response.code() == 401) {
-                        handleUnauthorizedSync()
+                        if (!retriedAfterUnauthorized && handleUnauthorizedSync()) {
+                            retriedAfterUnauthorized = true
+                            continue@syncAttempt
+                        }
                         NetworkDiagnostics.logCallLogSync(
                             fetched.size,
                             uploaded,
@@ -858,6 +869,7 @@ class SyncRepository(
                 finalCursor.lastSyncedAndroidCallLogId
             )
             return CallLogSyncStats(uploaded = uploaded, skipped = skipped, skippedDuplicate = totalSkippedDuplicate)
+            }
         } finally {
             callLogSyncGate.release()
         }
@@ -1210,11 +1222,11 @@ class SyncRepository(
      * the session is genuinely dead, so we log out: the next session check
      * (MainActivity start destination / syncPending) routes the user to login.
      */
-    private suspend fun handleUnauthorizedSync() {
+    private suspend fun handleUnauthorizedSync(): Boolean {
         val repo = authRepository
         if (repo == null) {
             NetworkDiagnostics.logCallLogSyncSkipped("server returned 401 but no auth repository is wired")
-            return
+            return false
         }
         val reloggedIn = try {
             repo.autoReLogin()
@@ -1224,11 +1236,12 @@ class SyncRepository(
             false
         }
         if (reloggedIn) {
-            NetworkDiagnostics.logCallLogSyncSkipped("server returned 401 — silent re-login succeeded; next sync uses the fresh token")
+            NetworkDiagnostics.logCallLogSyncSkipped("server returned 401 — silent re-login succeeded; retrying this sync with the fresh token")
         } else {
             NetworkDiagnostics.logCallLogSyncSkipped("server returned 401 — silent re-login failed; logging out")
             repo.logout()
         }
+        return reloggedIn
     }
 
     companion object {
@@ -1248,6 +1261,7 @@ class SyncRepository(
         private const val CALL_LOG_RECOVERY_WINDOW_MS = 7L * 24L * 60L * 60L * 1000L
         private const val CALL_LOG_RECOVERY_INTERVAL_MS = 24L * 60L * 60L * 1000L
         private val CHECK_EXISTING_REF_KEYS = listOf("clientRef", "externalCallId", "id", "_id")
+        private val CALL_LOG_CURSOR_ORDER = compareBy<MobileCallLog> { it.startedAt }.thenBy { it.id }
         private val GSON = Gson()
     }
 }
