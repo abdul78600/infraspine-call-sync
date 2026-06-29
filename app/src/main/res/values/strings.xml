@@ -16,7 +16,7 @@
     <string name="sync_status_label">Sync Status</string>
     <string name="sync_status_pending_count">%1$d recording(s) waiting to sync</string>
     <string name="sync_status_all_synced">All recordings are synced</string>
-    <string name="sync_status_no_recordings">No recordings yet — run a scan to get started</string>
+    <string name="sync_status_no_recordings">No recordings yet - run a scan to get started</string>
     <string name="scan_now">Scan Now</string>
     <string name="sync_now">Sync Now</string>
     <string name="settings">Settings</string>
@@ -42,16 +42,16 @@
     <string name="filter_failed">Failed</string>
     <string name="filter_unmatched">Unmatched</string>
     <string name="unmatched_label">Unmatched</string>
-    <string name="no_recordings_found">No recordings found. Tap \"Scan Now\" to scan the selected folder.</string>
+    <string name="no_recordings_found">No recordings found. Tap "Scan Now" to scan the selected folder.</string>
     <string name="search_recordings_hint">Search by file name or phone number</string>
-    <string name="no_search_results">No recordings match \"%1$s\"</string>
+    <string name="no_search_results">No recordings match "%1$s"</string>
 
     <!-- Player -->
     <string name="player_title">Now Playing</string>
     <string name="play">Play</string>
     <string name="pause">Pause</string>
     <string name="player_load_failed">Couldn\'t load this recording for playback</string>
-    <string name="player_playback_failed">Playback failed — the file may be unreadable or in an unsupported format</string>
+    <string name="player_playback_failed">Playback failed - the file may be unreadable or in an unsupported format</string>
     <string name="skip_back">Skip back 10 seconds</string>
     <string name="skip_forward">Skip forward 10 seconds</string>
     <string name="playback_speed_default">1.0x</string>
@@ -90,11 +90,15 @@
     <string name="folder_section_title">Recording Folder</string>
     <string name="update_section_title">App Updates</string>
     <string name="check_for_updates">Check for Updates</string>
-    <string name="checking_for_updates">Checking…</string>
+    <string name="checking_for_updates">Checking...</string>
     <string name="update_up_to_date">You\'re running the latest build</string>
     <string name="update_available_title">A new build is available</string>
-    <string name="update_available_message">Tap to open the download page in your browser, then install the new APK.</string>
+    <string name="update_available_message">Download the new APK here, then Android will open the installer automatically.</string>
     <string name="update_download">Download update</string>
+    <string name="update_downloading_button">Downloading...</string>
+    <string name="update_downloading">Downloading update. The installer will open automatically when the APK is ready.</string>
+    <string name="update_install_prompt">Update APK downloaded. Complete the Android install prompt to finish updating.</string>
+    <string name="update_install_permission_required">Allow this app to install unknown apps, then tap Download update again.</string>
     <string name="update_check_failed">Couldn\'t check for updates: %1$s</string>
     <string name="server_section_title">CRM Server</string>
     <string name="sync_section_title">Sync Options</string>
@@ -142,16 +146,16 @@
     <string name="label_failed">Failed</string>
     <string name="label_call_logs">Call Logs</string>
     <string name="unmatched_summary">No phone match found</string>
-    <string name="preparing_sync">Preparing sync…</string>
+    <string name="preparing_sync">Preparing sync...</string>
     <string name="session_expired_title">Session Expired</string>
     <string name="session_expired_message">Your CRM server session has expired. Please login again to continue syncing recordings.</string>
     <string name="login_again">Login Again</string>
     <string name="dismiss">Dismiss</string>
-    <string name="sync_fetching_call_logs">Fetching call logs from device…</string>
-    <string name="sync_checking_call_logs">Checking call logs with server…</string>
-    <string name="sync_call_logs_progress">Syncing %1$d of %2$d call logs…</string>
-    <string name="sync_checking_recordings">Checking recordings with server…</string>
-    <string name="sync_recordings_progress">Uploading %1$d of %2$d recordings…</string>
+    <string name="sync_fetching_call_logs">Fetching call logs from device...</string>
+    <string name="sync_checking_call_logs">Checking call logs with server...</string>
+    <string name="sync_call_logs_progress">Syncing %1$d of %2$d call logs...</string>
+    <string name="sync_checking_recordings">Checking recordings with server...</string>
+    <string name="sync_recordings_progress">Uploading %1$d of %2$d recordings...</string>
     <string name="uploaded_on">Uploaded on %1$s</string>
-    <string name="scan_in_progress">Scanning…</string>
+    <string name="scan_in_progress">Scanning...</string>
 </resources>

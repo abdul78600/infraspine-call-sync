@@ -12,12 +12,13 @@ import androidx.navigation.NavOptions
 import androidx.navigation.fragment.findNavController
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.snackbar.Snackbar
-import com.infraspine.callsync.update.AppUpdater
 import com.infraspine.callsync.CallSyncApplication
 import com.infraspine.callsync.R
 import com.infraspine.callsync.databinding.FragmentSettingsBinding
 import com.infraspine.callsync.domain.sync.CallLogInitialSyncMode
+import com.infraspine.callsync.update.AppUpdater
 import com.infraspine.callsync.update.UpdateCheckResult
+import com.infraspine.callsync.update.UpdateInstallEvent
 
 class SettingsFragment : Fragment() {
 
@@ -73,7 +74,6 @@ class SettingsFragment : Fragment() {
         }
 
         viewModel.uiState.observe(viewLifecycleOwner) { state ->
-            // Avoid clobbering in-progress edits by only setting text when it actually differs.
             if (binding.editCrmUrl.text?.toString() != state.crmServerUrl) {
                 binding.editCrmUrl.setText(state.crmServerUrl)
             }
@@ -139,12 +139,39 @@ class SettingsFragment : Fragment() {
             is UpdateCheckResult.UpdateAvailable -> {
                 binding.textUpdateStatus.visibility = View.VISIBLE
                 binding.textUpdateStatus.text = getString(R.string.update_available_title) +
-                    " — " + getString(R.string.update_available_message)
+                    " - " + getString(R.string.update_available_message)
                 binding.buttonDownloadUpdate.visibility = View.VISIBLE
+                binding.buttonDownloadUpdate.isEnabled = true
+                binding.buttonDownloadUpdate.text = getString(R.string.update_download)
                 binding.buttonDownloadUpdate.setOnClickListener {
-                    binding.buttonDownloadUpdate.isEnabled = false
-                    binding.buttonDownloadUpdate.text = getString(R.string.checking_for_updates)
-                    AppUpdater.downloadAndInstall(requireContext().applicationContext, result.downloadUrl)
+                    setUpdateDownloadState(downloading = true)
+                    AppUpdater.downloadAndInstall(requireContext(), result.downloadUrl) { event ->
+                        when (event) {
+                            UpdateInstallEvent.DownloadStarted -> {
+                                binding.textUpdateStatus.visibility = View.VISIBLE
+                                binding.textUpdateStatus.text = getString(R.string.update_downloading)
+                            }
+
+                            UpdateInstallEvent.InstallPromptLaunched -> {
+                                setUpdateDownloadState(downloading = false)
+                                binding.textUpdateStatus.visibility = View.VISIBLE
+                                binding.textUpdateStatus.text = getString(R.string.update_install_prompt)
+                            }
+
+                            UpdateInstallEvent.InstallPermissionRequired -> {
+                                setUpdateDownloadState(downloading = false)
+                                binding.textUpdateStatus.visibility = View.VISIBLE
+                                binding.textUpdateStatus.text = getString(R.string.update_install_permission_required)
+                            }
+
+                            is UpdateInstallEvent.Failed -> {
+                                setUpdateDownloadState(downloading = false)
+                                binding.textUpdateStatus.visibility = View.VISIBLE
+                                binding.textUpdateStatus.text = event.message
+                                Snackbar.make(binding.root, event.message, Snackbar.LENGTH_LONG).show()
+                            }
+                        }
+                    }
                 }
             }
 
@@ -160,8 +187,11 @@ class SettingsFragment : Fragment() {
         }
     }
 
-    private fun openDownloadPage(url: String) {
-        AppUpdater.downloadAndInstall(requireContext().applicationContext, url)
+    private fun setUpdateDownloadState(downloading: Boolean) {
+        binding.buttonDownloadUpdate.isEnabled = !downloading
+        binding.buttonDownloadUpdate.text = getString(
+            if (downloading) R.string.update_downloading_button else R.string.update_download
+        )
     }
 
     private fun saveSettings() {
