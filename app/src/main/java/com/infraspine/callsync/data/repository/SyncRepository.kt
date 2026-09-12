@@ -1325,7 +1325,9 @@ class SyncRepository(
          *  causes an infinite re-upload loop via the recovery scan. */
         private const val CHECK_EXISTING_TIMEOUT_MS = 45_000L
         private const val APP_OPEN_SYNC_THROTTLE_MS = 15_000L
-        private const val CALL_LOG_RECOVERY_WINDOW_MS = 7L * 24L * 60L * 60L * 1000L
+        /** Look back far enough to backfill holes left by a jumped cursor or a
+         *  reinstall. 7 days left Zia's 3–4 Sep calls outside recovery by 12 Sep. */
+        private const val CALL_LOG_RECOVERY_WINDOW_MS = 30L * 24L * 60L * 60L * 1000L
         private const val CALL_LOG_RECOVERY_INTERVAL_MS = 24L * 60L * 60L * 1000L
         private val CHECK_EXISTING_REF_KEYS = listOf("clientRef", "externalCallId", "id", "_id")
         private val CALL_LOG_CURSOR_ORDER = compareBy<MobileCallLog> { it.startedAt }.thenBy { it.id }
